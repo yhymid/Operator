@@ -1,0 +1,21 @@
+{
+  "name": "operator",
+  "version": "1.0.0",
+  "description": "Simple Discord bot with slash commands using discord.js",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "javascript",
+    "slash-commands"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5"
+  }
+}
