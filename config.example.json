@@ -1,0 +1,69 @@
+{
+  "_INSTRUKCJA": {
+    "deleteIntervalDays": "How often to run cleanup in days (7 = once per week)",
+    "deleteMessagesOlderThanDays": "Delete messages older than X days (0 = all matched messages)",
+    "cronSchedule": "CRON schedule, for example every Sunday at 03:00",
+    "channels": "List of channels handled by AutoClean",
+    "ownerIds": "Optional owner ID fallback when OWNER_IDS is not set in env",
+    "logChannelId": "Optional log channel ID, leave empty to disable",
+    "deleteLimit": "Max messages deleted in one run (0 = no limit)",
+    "dryRun": "Test mode, log actions but do not delete messages",
+    "automod": "AutoMod settings"
+  },
+  "ownerIds": [],
+  "deleteIntervalDays": 7,
+  "deleteMessagesOlderThanDays": 0,
+  "cronSchedule": "0 3 * * 0",
+  "channels": [
+    {
+      "id": "123456789012345678",
+      "enabled": true,
+      "deleteLimit": 0,
+      "deletePinned": false
+    }
+  ],
+  "logChannelId": "",
+  "deleteLimit": 0,
+  "deletePinned": false,
+  "dryRun": false,
+  "notifyBeforeDelete": {
+    "enabled": true,
+    "minutesBefore": 5,
+    "message": "Warning: messages in this channel will be cleaned in {minutes} minutes."
+  },
+  "whitelist": {
+    "roles": [],
+    "users": []
+  },
+  "automod": {
+    "enabled": true,
+    "logChannelId": "",
+    "exemptRoles": [],
+    "exemptUsers": [],
+    "rules": {
+      "blockedWords": [],
+      "blockedRegex": [],
+      "blockInvites": true,
+      "blockLinks": false,
+      "allowedDomains": [],
+      "maxMentions": 6,
+      "caps": {
+        "enabled": false,
+        "minLength": 12,
+        "ratio": 0.75
+      },
+      "duplicate": {
+        "enabled": true,
+        "windowSeconds": 15,
+        "maxRepeats": 4
+      }
+    },
+    "actions": {
+      "delete": true,
+      "timeoutMinutes": 0,
+      "warnInChannel": true,
+      "warnTemplate": "AutoMod removed a message from {user} ({rule}).",
+      "warnDeleteAfterSeconds": 15
+    }
+  }
+}

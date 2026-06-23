@@ -1,0 +1,86 @@
+server:
+  port: 2333
+  address: 127.0.0.1
+
+lavalink:
+  server:
+    password: "youshallnotpass"
+    sources:
+      youtube: false
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      nico: true
+      http: true
+      local: false
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    youtubePlaylistLoadLimit: 100
+    playerUpdateInterval: 5
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+
+  plugins:
+    # YouTube support for Lavalink v4:
+    # https://github.com/lavalink-devs/youtube-source
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
+      snapshot: false
+
+    # Spotify / Apple Music / Deezer metadata and sources:
+    # https://github.com/topi314/LavaSrc
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.1"
+      snapshot: false
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - WEB
+      - WEBEMBEDDED
+      - MWEB
+      - ANDROID_VR
+      - MUSIC
+    poToken: "${YOUTUBE_POTOKEN:}"
+    visitorData: "${YOUTUBE_VISITOR_DATA:}"
+    oauth:
+      enabled: false
+
+  lavasrc:
+    providers:
+      - "ytsearch:\"%ISRC%\""
+      - "scsearch:%QUERY%"
+      - "ytsearch:%QUERY%"
+      - "ytmsearch:%QUERY%"
+    sources:
+      spotify: true
+      applemusic: false
+      deezer: false
+      youtube: false
+    spotify:
+      clientId: "SPOTIFY_CLIENT_ID"
+      clientSecret: "SPOTIFY_CLIENT_SECRET"
+      countryCode: "PL"
+      playlistLoadLimit: 6
+      albumLoadLimit: 6
+      preferAnonymousToken: false
+      # Optional: for Spotify-generated playlists you may still need this:
+      # customTokenEndpoint: "http://localhost:8080/api/token"
+    deezer:
+      masterDecryptionKey: "${DEEZER_MASTER_KEY:}"
+      arl: "${DEEZER_ARL:}"
+      formats: [ "FLAC", "MP3_320", "MP3_256", "MP3_128", "MP3_64", "AAC_64" ]
+      # Set sources.deezer=true only after DEEZER_MASTER_KEY and DEEZER_ARL are configured.
+
+logging:
+  file:
+    path: ./logs/
+  level:
+    root: INFO
+    lavalink: INFO
+    dev.lavalink.youtube.http.YoutubeOauth2Handler: INFO
