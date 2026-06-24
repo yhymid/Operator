@@ -1,0 +1,20 @@
+[Unit]
+Description=Operator Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/srv/operator/app
+EnvironmentFile=/srv/operator/app/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /srv/operator/app/main.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+SyslogIdentifier=operator
+
+[Install]
+WantedBy=multi-user.target

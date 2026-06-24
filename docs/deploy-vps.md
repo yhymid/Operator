@@ -56,6 +56,8 @@ npm run commands:sync
 
 4. Uruchom bota przez `systemd` albo PM2.
 
+Nie odpalaj produkcji przez zwykle `nohup node main.js` z sesji SSH. Na czesci VPS-ow proces potomny jest ubijany po zamknieciu sesji i bot "sam sie wylacza", mimo ze w logu aplikacji nie ma bledu.
+
 ## Minimalny systemd service
 
 ```ini
@@ -80,6 +82,30 @@ Group=operator
 
 [Install]
 WantedBy=multi-user.target
+```
+
+## Instalacja service krok po kroku
+
+1. Skopiuj gotowy szablon:
+
+```bash
+sudo cp docs/operator.service.example /etc/systemd/system/operator.service
+```
+
+2. Popraw sciezki i uzytkownika w pliku, jesli projekt lezy gdzie indziej niz `/srv/operator/app`.
+
+3. Przeladuj `systemd` i wlacz autostart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now operator.service
+```
+
+4. Sprawdz status i log:
+
+```bash
+systemctl status operator.service --no-pager
+journalctl -u operator.service -n 100 --no-pager
 ```
 
 ## Checklista po deployu
