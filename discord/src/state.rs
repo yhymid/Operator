@@ -543,4 +543,28 @@ mod tests {
         assert!(store.verification_lockout("2", "5").is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
+
+    /// A state file that fails to parse (truncated by a full disk, edited by hand) must not be
+    /// silently replaced by defaults on the next write: it holds the verification roles,
+    /// webhook tokens and announcement schedule of the guild.
+    #[test]
+    fn corrupt_state_file_is_preserved() {
+        let (store, dir) = temp_store("corrupt");
+        let corrupt = r#"{"guildId":"3","verification":{"enabled":true,"roleId":"42""#;
+        std::fs::write(dir.join("3.json"), corrupt).unwrap();
+
+        store.mark_guild_online("3", Some("Guild"), "test");
+
+        let kept: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy() != "3.json")
+            .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+            .collect();
+        assert!(
+            kept.iter().any(|raw| raw == corrupt),
+            "the unreadable 3.json was overwritten without a backup"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
