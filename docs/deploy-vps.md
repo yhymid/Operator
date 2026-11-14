@@ -53,4 +53,21 @@ journalctl -u operator -f
 Aktualizacja: zbuduj nowa binarke, podmien `/srv/operator/app/operator-discord`,
 `sudo systemctl restart operator`.
 
+## 5. Lavalink (muzyka)
+
+```bash
+sudo apt install openjdk-21-jre-headless      # albo nowsza Java (17+)
+sudo mkdir -p /srv/operator/lavalink && sudo chown ubuntu:ubuntu /srv/operator/lavalink
+cd /srv/operator/lavalink
+curl -LO https://github.com/lavalink-devs/Lavalink/releases/latest/download/Lavalink.jar
+mv Lavalink.jar lavalink.jar
+cp /path/to/Operator/discord/deploy/lavalink/application.yml.example application.yml   # uzupelnij
+sudo cp /path/to/Operator/discord/deploy/lavalink/lavalink.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now lavalink
+journalctl -u lavalink -f        # przy pierwszym starcie: kod OAuth YouTube do potwierdzenia
+```
+
+Po potwierdzeniu OAuth wpisz wypisany refresh token do `application.yml` (`plugins.youtube.oauth.refreshToken`)
+i zrestartuj `lavalink`. Restartuj Lavalinka tylko, gdy nic nie gra (`GET /v4/stats` -> `playingPlayers`).
+
 Nie uruchamiaj produkcji przez `nohup` z sesji SSH - proces potrafi zginac po wylogowaniu.

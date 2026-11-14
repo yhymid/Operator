@@ -38,6 +38,7 @@ struct Settings {
     cookies: PathBuf,
     codec: VideoCodec,
     crf: Option<u32>,
+    js_runtime: String,
 }
 
 impl Settings {
@@ -73,6 +74,8 @@ impl Settings {
             crf: env::var("YTDLP_VIDEO_CRF")
                 .and_then(|v| v.parse::<u32>().ok())
                 .filter(|v| *v <= 63),
+            // yt-dlp needs a JS runtime for YouTube challenges; it only looks for deno by default.
+            js_runtime: env::var("YTDLP_JS_RUNTIME").unwrap_or_else(|| "node".to_owned()),
         }
     }
 
@@ -460,6 +463,7 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
     ]
     .map(str::to_owned)
     .to_vec();
+    args.extend(["--js-runtimes".to_owned(), settings.js_runtime.clone()]);
     if settings.codec != VideoCodec::Source {
         args.extend(["--merge-output-format", "mp4"].map(str::to_owned));
     }

@@ -1,0 +1,22 @@
+[Unit]
+Description=Lavalink v4 (Operator music)
+After=network-online.target
+Wants=network-online.target
+Before=operator.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+# Directory with lavalink.jar and application.yml (plugins/ is downloaded there).
+WorkingDirectory=/srv/operator/lavalink
+# Do NOT add -Djava.net.preferIPv6Addresses=true: YouTube may geolocate a VPS IPv6 range in a
+# different country than its IPv4 (we saw RU vs PL), which makes region-locked videos fail.
+ExecStart=/usr/bin/java -Xms128m -Xmx768m -jar lavalink.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=lavalink
+
+[Install]
+WantedBy=multi-user.target

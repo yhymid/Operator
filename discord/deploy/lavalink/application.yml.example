@@ -24,14 +24,17 @@ lavalink:
     useSeekGhosting: true
 
   plugins:
-    # YouTube support for Lavalink v4:
-    # https://github.com/lavalink-devs/youtube-source
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
-      snapshot: false
+    # YouTube support for Lavalink v4: https://github.com/lavalink-devs/youtube-source
+    # Use a snapshot (= build of a master commit): release 1.18.2 (2026-07) misses the fixes
+    # that make YouTube playable from a VPS (TV client User-Agent, IOS, visitor data refresh).
+    # Latest hash: <latest> in
+    # https://maven.lavalink.dev/snapshots/dev/lavalink/youtube/youtube-plugin/maven-metadata.xml
+    - dependency: "dev.lavalink.youtube:youtube-plugin:e41dd95f8bd134b51e75080fb28cc805fecb431a"
+      snapshot: true
 
     # Spotify / Apple Music / Deezer metadata and sources:
     # https://github.com/topi314/LavaSrc
-    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.1"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
       snapshot: false
 
 plugins:
@@ -41,15 +44,23 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
+      - TV
+      - TVHTML5_SIMPLY
+      - IOS
+      - ANDROID_VR
       - WEB
       - WEBEMBEDDED
       - MWEB
-      - ANDROID_VR
       - MUSIC
-    poToken: "${YOUTUBE_POTOKEN:}"
-    visitorData: "${YOUTUBE_VISITOR_DATA:}"
+    # TV playback needs OAuth. First start without refreshToken: follow the device-code
+    # instructions in the Lavalink log, then paste the printed refresh token here.
     oauth:
-      enabled: false
+      enabled: true
+      refreshToken: "${YOUTUBE_OAUTH_REFRESH_TOKEN:}"
+    # Signature deciphering is no longer done inside the plugin.
+    remoteCipher:
+      url: "https://cipher.kikkia.dev/"
+      userAgent: "operator-bot"
 
   lavasrc:
     providers:
@@ -57,6 +68,8 @@ plugins:
       - "scsearch:%QUERY%"
       - "ytsearch:%QUERY%"
       - "ytmsearch:%QUERY%"
+    # Keep LavaSrc's ytdlp source disabled: it registers before the YouTube plugin and would
+    # take over every YouTube URL.
     sources:
       spotify: true
       applemusic: false

@@ -28,7 +28,7 @@ discord/
   src/lavalink.rs          klient Lavalink v4 (REST + WebSocket)
   commands.json            definicje komend slash
   deploy/                  .env.example, config.example.json, operator-discord.service,
-                           lavalink/ (application.yml.example + pluginy)
+                           lavalink/ (application.yml.example, lavalink.service)
 docs/                      deploy na VPS, roznice wzgledem JS
 ```
 
@@ -65,9 +65,18 @@ Logi: `RUST_LOG=debug` dla szczegolow. Pod systemd znaczniki czasu dodaje journa
 
 ## Lavalink
 
-Przyklad konfiguracji: `discord/deploy/lavalink/application.yml.example`. Polaczenie ustawiasz
-w `.env` (`LAVALINK_URL` albo `LAVALINK_HOST`/`PORT`/`PASSWORD`/`SECURE`/`NODE_ID`).
+Konfiguracja: `discord/deploy/lavalink/application.yml.example`, usluga systemd:
+`discord/deploy/lavalink/lavalink.service` (Lavalink 4.2+, Java 17+). Pluginy Lavalink pobiera sam.
+Polaczenie bota ustawiasz w `.env` (`LAVALINK_URL` albo `LAVALINK_HOST`/`PORT`/`PASSWORD`/`SECURE`/`NODE_ID`).
 Bez Lavalinka bot dziala, a muzyka laczy sie sama, gdy node wstanie (ponawianie co 10 s).
+
+YouTube z VPS (sprawdzone 2026-11):
+
+- plugin youtube-source jako **snapshot** (build z mastera) - wydanie 1.18.2 nie ma poprawek
+  potrzebnych na adresach serwerowni (klient TV, IOS),
+- OAuth wlaczony (odtwarzanie klientem TV), szyfr przez `remoteCipher` (`cipher.kikkia.dev`),
+- zrodlo `ytdlp` w LavaSrc wylaczone - rejestruje sie przed pluginem i przejmuje YouTube,
+- bez `preferIPv6Addresses` - YouTube moze lokalizowac IPv6 serwera w innym kraju niz IPv4.
 
 ## /ytdlp
 
