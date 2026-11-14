@@ -34,3 +34,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
+
+## Status
+
+- Telegram: `crates/operator-telegram`, opis i roznice w [rust-telegram.md](rust-telegram.md).

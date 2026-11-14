@@ -18,10 +18,30 @@ use crate::api::{ApiError, is_rate_limit_error};
 use crate::bot::{Bot, Ctx};
 use crate::log;
 use crate::queue::{CancelOutcome, Job, JobState, NewJob, Queue, Runner, queue_status_text};
+use crate::settings::VideoCodec;
 use crate::status::StatusUpdater;
 
 const BEST_FORMAT: &str = "bestvideo+bestaudio/best";
-const BEST_FORMAT_SORT: &str = "res:desc,br:desc,fps:desc,asr:desc,size:desc";
+
+/// `-S` sort order. Highest resolution and frame rate always win; among equal ones SDR and
+/// the target codec are preferred so fewer files need re-encoding. (The JS version passed
+/// `res:desc,...`, which yt-dlp reads as "preferred value `desc`" and effectively ignores.)
+fn format_sort(codec: VideoCodec) -> &'static str {
+    match codec {
+        VideoCodec::H264 => "res,fps,hdr:sdr,vcodec:h264,acodec:aac,br,asr,size",
+        VideoCodec::Av1 => "res,fps,hdr:sdr,vcodec:av01,acodec:aac,br,asr,size",
+        VideoCodec::Source => "res,fps,br,asr,size",
+    }
+}
+
+/// Single-file format Telegram may fetch by URL: only streams that already match the target.
+fn direct_format(codec: VideoCodec) -> &'static str {
+    match codec {
+        VideoCodec::H264 => "b[vcodec~='^(avc|h264)']",
+        VideoCodec::Av1 => "b[vcodec~='^(av01|avc|h264)']",
+        VideoCodec::Source => "best",
+    }
+}
 const VIDEO_EXTENSIONS: [&str; 4] = [".mp4", ".m4v", ".webm", ".mov"];
 
 fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
@@ -375,7 +395,7 @@ impl Bot {
             "-f",
             BEST_FORMAT,
             "-S",
-            BEST_FORMAT_SORT,
+            format_sort(self.settings.video_codec),
         ]
         .map(str::to_owned)
         .to_vec();
@@ -439,7 +459,7 @@ impl Bot {
             "-f".to_owned(),
             BEST_FORMAT.to_owned(),
             "-S".to_owned(),
-            BEST_FORMAT_SORT.to_owned(),
+            format_sort(self.settings.video_codec).to_owned(),
             "--merge-output-format".to_owned(),
             "mp4".to_owned(),
             "-o".to_owned(),
@@ -571,9 +591,9 @@ impl Bot {
             "--no-warnings",
             "--get-url",
             "-f",
-            "best",
+            direct_format(self.settings.video_codec),
             "-S",
-            "res:desc,br:desc,fps:desc,asr:desc,size:desc",
+            format_sort(self.settings.video_codec),
         ]
         .map(str::to_owned)
         .to_vec();
@@ -598,6 +618,218 @@ impl Bot {
             Some(json!({ "length": utf16_len(&direct) })),
         );
         Ok(direct)
+    }
+}
+
+/// Codecs of the first video and audio stream (`ffprobe`).
+#[derive(Debug, Default, PartialEq)]
+struct StreamInfo {
+    video: Option<String>,
+    pix_fmt: Option<String>,
+    audio: Option<String>,
+}
+
+fn parse_probe(output: &str) -> StreamInfo {
+    let value: Value = serde_json::from_str(output).unwrap_or(Value::Null);
+    let mut info = StreamInfo::default();
+    for stream in value["streams"].as_array().into_iter().flatten() {
+        let name = stream["codec_name"].as_str().map(str::to_owned);
+        match stream["codec_type"].as_str() {
+            Some("video") if info.video.is_none() => {
+                info.video = name;
+                info.pix_fmt = stream["pix_fmt"].as_str().map(str::to_owned);
+            }
+            Some("audio") if info.audio.is_none() => info.audio = name,
+            _ => {}
+        }
+    }
+    info
+}
+
+/// ffmpeg arguments that turn `input` into `output` playable with the target codec.
+/// Streams that already match are copied; everything gets `+faststart` for streaming.
+fn transcode_args(
+    info: &StreamInfo,
+    codec: VideoCodec,
+    crf: Option<u32>,
+    input: &Path,
+    output: &Path,
+) -> (Vec<String>, bool) {
+    let eight_bit = matches!(info.pix_fmt.as_deref(), Some("yuv420p" | "yuvj420p"));
+    let video_ok = match codec {
+        VideoCodec::H264 => info.video.as_deref() == Some("h264") && eight_bit,
+        VideoCodec::Av1 => info.video.as_deref() == Some("av1") && eight_bit,
+        VideoCodec::Source => true,
+    };
+    let audio_ok = codec == VideoCodec::Source
+        || info.audio.is_none()
+        || matches!(info.audio.as_deref(), Some("aac" | "mp3"));
+    let mut args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-i"]
+        .map(str::to_owned)
+        .to_vec();
+    args.push(input.to_string_lossy().into_owned());
+    args.extend(["-map", "0:v:0", "-map", "0:a:0?"].map(str::to_owned));
+    let reencode = !video_ok;
+    if video_ok {
+        args.extend(["-c:v", "copy"].map(str::to_owned));
+    } else if codec == VideoCodec::Av1 {
+        let crf = crf.unwrap_or(30).to_string();
+        args.extend(
+            [
+                "-c:v",
+                "libsvtav1",
+                "-preset",
+                "6",
+                "-crf",
+                &crf,
+                "-pix_fmt",
+                "yuv420p",
+            ]
+            .map(str::to_owned),
+        );
+    } else {
+        // CRF 18 with x264 is visually transparent for almost all sources.
+        let crf = crf.unwrap_or(18).to_string();
+        args.extend(
+            [
+                "-c:v",
+                "libx264",
+                "-preset",
+                "slow",
+                "-crf",
+                &crf,
+                "-profile:v",
+                "high",
+                "-pix_fmt",
+                "yuv420p",
+            ]
+            .map(str::to_owned),
+        );
+    }
+    if audio_ok {
+        args.extend(["-c:a", "copy"].map(str::to_owned));
+    } else {
+        args.extend(["-c:a", "aac", "-b:a", "192k"].map(str::to_owned));
+    }
+    args.extend(["-movflags", "+faststart"].map(str::to_owned));
+    args.push(output.to_string_lossy().into_owned());
+    (args, reencode)
+}
+
+impl Bot {
+    /// Makes the downloaded file play inline in Discord/Telegram: re-encodes HEVC, VP9,
+    /// 10-bit/HDR (or anything not matching `YTDLP_VIDEO_CODEC`) and remuxes for fast start.
+    async fn ensure_compatible(&self, path: &Path, job: &Arc<Job>) -> Result<PathBuf> {
+        let codec = self.settings.video_codec;
+        if !VIDEO_EXTENSIONS.contains(&extname(path).as_str()) {
+            return Ok(path.to_owned());
+        }
+        let probe_args = [
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,codec_name,pix_fmt",
+            "-of",
+            "json",
+        ]
+        .map(str::to_owned)
+        .into_iter()
+        .chain(std::iter::once(path.to_string_lossy().into_owned()))
+        .collect::<Vec<_>>();
+        let info = match exec(
+            &self.settings.ffprobe_path,
+            &probe_args,
+            Duration::from_secs(60),
+        )
+        .await
+        {
+            Ok(output) => parse_probe(&output),
+            Err(failure) => {
+                log::warn(
+                    "ffprobe nie powiódł się; wysyłam plik bez konwersji",
+                    Some(json!(utf16_prefix(&failure.message, 300))),
+                );
+                return Ok(path.to_owned());
+            }
+        };
+        if info.video.is_none() {
+            return Ok(path.to_owned());
+        }
+        let output = path.with_file_name("delivery.mp4");
+        let (args, reencode) = transcode_args(&info, codec, self.settings.video_crf, path, &output);
+        log::info(
+            "Przygotowuję plik do wysyłki",
+            Some(json!({
+                "jobId": job.id,
+                "videoCodec": info.video,
+                "pixFmt": info.pix_fmt,
+                "audioCodec": info.audio,
+                "target": format!("{codec:?}"),
+                "reencode": reencode,
+            })),
+        );
+        if reencode {
+            let label = if codec == VideoCodec::Av1 {
+                "AV1"
+            } else {
+                "H.264"
+            };
+            job.set_status_text(&format!("Konwersja do {label}…"));
+            job.status
+                .set(format!(
+                    "🎞️ Konwertuję wideo do {label} (źródło: {}), żeby działało w Discordzie i Telegramie…",
+                    info.video.as_deref().unwrap_or("?")
+                ))
+                .await;
+        }
+        let started = Instant::now();
+        let timeout = Duration::from_secs_f64(self.settings.download_timeout_secs.max(60.0));
+        let mut child = Command::new(&self.settings.ffmpeg_path)
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| anyhow!("ffmpeg: {}", spawn_error(&self.settings.ffmpeg_path, &e)))?;
+        job.set_process(child.id());
+        let mut stderr_pipe = child.stderr.take();
+        let stderr = tokio::spawn(async move {
+            let mut buf = Vec::new();
+            if let Some(pipe) = stderr_pipe.as_mut() {
+                let _ = pipe.read_to_end(&mut buf).await;
+            }
+            String::from_utf8_lossy(&buf).into_owned()
+        });
+        let status = tokio::select! {
+            status = child.wait() => status,
+            () = tokio::time::sleep(timeout) => {
+                let _ = child.start_kill();
+                child.wait().await
+            }
+        };
+        job.set_process(None);
+        let stderr = stderr.await.unwrap_or_default();
+        if !status.is_ok_and(|s| s.success()) {
+            let last = stderr
+                .lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("nieznany błąd");
+            bail!("ffmpeg: {}", utf16_prefix(last.trim(), 300));
+        }
+        let _ = tokio::fs::remove_file(path).await;
+        let size = tokio::fs::metadata(&output).await.map_or(0, |m| m.len());
+        log::info(
+            "Plik gotowy do wysyłki",
+            Some(json!({
+                "jobId": job.id,
+                "reencode": reencode,
+                "sizeBytes": size,
+                "durationMs": started.elapsed().as_millis() as u64,
+            })),
+        );
+        Ok(output)
     }
 }
 
@@ -1540,6 +1772,7 @@ async fn deliver(bot: &Arc<Bot>, job: &Arc<Job>, temp_dir: &mut Option<PathBuf>)
         progress_job.status.set_detached(text);
     });
     let file_path = bot.download(&url, &dir, on_progress, job).await?;
+    let file_path = bot.ensure_compatible(&file_path, job).await?;
     let size = tokio::fs::metadata(&file_path).await?.len() as f64;
     if size > bot.settings.max_upload_bytes {
         log::warn(
@@ -1775,6 +2008,36 @@ mod tests {
             size_from_requested(&json!({"filesize": 0, "filesize_approx": 7})),
             Some(7.0)
         );
+    }
+
+    #[test]
+    fn transcode_decisions() {
+        let p = Path::new("/t/video.mp4");
+        let o = Path::new("/t/delivery.mp4");
+        let hevc = parse_probe(
+            r#"{"streams":[{"codec_type":"video","codec_name":"hevc","pix_fmt":"yuv420p10le"},{"codec_type":"audio","codec_name":"opus"}]}"#,
+        );
+        assert_eq!(hevc.video.as_deref(), Some("hevc"));
+        let (args, reencode) = transcode_args(&hevc, VideoCodec::H264, None, p, o);
+        assert!(reencode);
+        let joined = args.join(" ");
+        assert!(
+            joined.contains("-c:v libx264 -preset slow -crf 18 -profile:v high -pix_fmt yuv420p")
+        );
+        assert!(joined.contains("-c:a aac -b:a 192k"));
+        assert!(joined.ends_with("-movflags +faststart /t/delivery.mp4"));
+
+        let h264 = parse_probe(
+            r#"{"streams":[{"codec_type":"video","codec_name":"h264","pix_fmt":"yuv420p"},{"codec_type":"audio","codec_name":"aac"}]}"#,
+        );
+        let (args, reencode) = transcode_args(&h264, VideoCodec::H264, None, p, o);
+        assert!(!reencode);
+        assert!(args.join(" ").contains("-c:v copy -c:a copy"));
+
+        let (args, reencode) = transcode_args(&hevc, VideoCodec::Av1, Some(28), p, o);
+        assert!(reencode);
+        assert!(args.join(" ").contains("-c:v libsvtav1 -preset 6 -crf 28"));
+        assert!(!transcode_args(&hevc, VideoCodec::Source, None, p, o).1);
     }
 
     #[test]

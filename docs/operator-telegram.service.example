@@ -1,0 +1,18 @@
+[Unit]
+Description=Operator Telegram bot (Rust)
+After=network-online.target telegram-bot-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/yhymfiles/operator-tg
+ExecStart=/home/ubuntu/yhymfiles/operator-tg/operator-telegram
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

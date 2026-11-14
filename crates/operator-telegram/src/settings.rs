@@ -60,6 +60,27 @@ fn split_list(raw: &str) -> impl Iterator<Item = &str> {
         .filter(|v| !v.is_empty())
 }
 
+/// Target video codec for delivered files (`YTDLP_VIDEO_CODEC`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoCodec {
+    /// H.264 8-bit yuv420p + AAC in MP4: plays inline in Discord, Telegram and browsers.
+    H264,
+    /// AV1 8-bit (SVT-AV1) + AAC: smaller files; inline playback is not guaranteed everywhere.
+    Av1,
+    /// Keep whatever the source provides (only remux for fast start).
+    Source,
+}
+
+impl VideoCodec {
+    pub fn parse(raw: Option<&str>) -> Self {
+        match raw.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            Some("av1" | "av01") => Self::Av1,
+            Some("source" | "copy" | "original") => Self::Source,
+            _ => Self::H264,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub token: String,
@@ -78,6 +99,10 @@ pub struct Settings {
     pub queue_max_pending: usize,
     pub size_probe: bool,
     pub probe_timeout_ms: u64,
+    pub video_codec: VideoCodec,
+    pub video_crf: Option<u32>,
+    pub ffmpeg_path: String,
+    pub ffprobe_path: String,
     pub max_message_age_secs: u64,
     pub admin_ids: HashSet<String>,
     pub admin_usernames: HashSet<String>,
@@ -136,6 +161,13 @@ impl Settings {
             queue_max_pending: positive_env("YTDLP_QUEUE_MAX_PENDING", 20) as usize,
             size_probe: not_disabled("YTDLP_QUEUE_SIZE_PROBE"),
             probe_timeout_ms: positive_env("YTDLP_QUEUE_PROBE_TIMEOUT_SECONDS", 30) * 1000,
+            video_codec: VideoCodec::parse(std::env::var("YTDLP_VIDEO_CODEC").ok().as_deref()),
+            video_crf: std::env::var("YTDLP_VIDEO_CRF")
+                .ok()
+                .and_then(|v| v.trim().parse::<u32>().ok())
+                .filter(|v| *v <= 63),
+            ffmpeg_path: env_or("FFMPEG_PATH", "ffmpeg"),
+            ffprobe_path: env_or("FFPROBE_PATH", "ffprobe"),
             max_message_age_secs: positive_env("YTDLP_MAX_MESSAGE_AGE_SECONDS", 10 * 60),
             admin_ids: split_list(&std::env::var("ADMIN_IDS").unwrap_or_default())
                 .map(str::to_owned)

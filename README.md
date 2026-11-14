@@ -1,5 +1,15 @@
 # Operator
 
+> **Galaz `rust/telegram-rewrite`**: bot Telegram przepisany na Rust - `crates/operator-telegram`.
+> Szczegoly, konfiguracja i nowa mechanika pobierania (zgodne kodeki H.264/AV1):
+> [docs/rust-telegram.md](docs/rust-telegram.md). Ponizej opis wersji JS bota Discord,
+> ktora zostaje w repo jako punkt odniesienia.
+>
+> ```bash
+> cargo build --release -p operator-telegram
+> ./target/release/operator-telegram
+> ```
+
 Operator to bot Discord oparty o `discord.js`, przygotowany pod lokalne rozwijanie zmian i pozniejsze spokojne wdrozenie na VPS.
 
 ## Co potrafi
