@@ -26,6 +26,8 @@ const POLL_HTTP_TIMEOUT: Duration = Duration::from_secs(POLL_TIMEOUT_SECS + 20);
 /// How long a SIGINT/SIGTERM waits for a running download before exiting
 /// (the systemd unit uses `TimeoutStopSec=30`).
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(25);
+/// Update handlers running at once; polling waits for a free slot when all are busy.
+const MAX_CONCURRENT_HANDLERS: usize = 32;
 
 fn main() -> ExitCode {
     operator_common::env::load_dotenv();
@@ -123,6 +125,7 @@ async fn run() -> ExitCode {
     let shutdown = operator_common::shutdown::signal();
     tokio::pin!(shutdown);
     let mut offset: i64 = 0;
+    let handler_slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_HANDLERS));
     let outcome = loop {
         let request = json!({ "timeout": POLL_TIMEOUT_SECS, "offset": offset });
         let poll = api.raw_call("getUpdates", &request, POLL_HTTP_TIMEOUT);
@@ -153,37 +156,41 @@ async fn run() -> ExitCode {
         if let Some(last) = updates.last().and_then(|u| u["update_id"].as_i64()) {
             offset = last + 1;
         }
-        // Telegraf handles one batch concurrently and waits for it before polling again.
-        let handles: Vec<_> = updates
-            .into_iter()
-            .map(|update| {
-                let id = update["update_id"].clone();
-                (id, tokio::spawn(bot::handle_update(bot.clone(), update)))
-            })
-            .collect();
+        // Each update runs in its own task; polling continues right away, so a slow handler
+        // (size probe, Telegram rate limits) in one chat does not hold up the others. The
+        // semaphore bounds how many handlers run at once and slows polling down when full.
         let timeout = Duration::from_millis(settings.handler_timeout_ms);
-        for (id, mut handle) in handles {
-            let label = format!(
-                "Błąd obsługi aktualizacji {}",
-                if id.is_null() {
-                    "unknown".to_owned()
-                } else {
-                    id.to_string()
+        for update in updates {
+            let Ok(permit) = handler_slots.clone().acquire_owned().await else {
+                break;
+            };
+            let bot = bot.clone();
+            tokio::spawn(async move {
+                let _permit = permit;
+                let id = update["update_id"].clone();
+                let label = format!(
+                    "Błąd obsługi aktualizacji {}",
+                    if id.is_null() {
+                        "unknown".to_owned()
+                    } else {
+                        id.to_string()
+                    }
+                );
+                let mut handle = tokio::spawn(bot::handle_update(bot, update));
+                match tokio::time::timeout(timeout, &mut handle).await {
+                    Ok(Ok(Ok(()))) => {}
+                    Ok(Ok(Err(error))) => log::error(&label, Some(log::error_value(&error))),
+                    Ok(Err(join)) => log::error(&label, Some(json!(join.to_string()))),
+                    // The handler keeps running in the background, as with Telegraf's pTimeout.
+                    Err(_) => log::error(
+                        &label,
+                        Some(json!(format!(
+                            "Promise timed out after {} milliseconds",
+                            timeout.as_millis()
+                        ))),
+                    ),
                 }
-            );
-            match tokio::time::timeout(timeout, &mut handle).await {
-                Ok(Ok(Ok(()))) => {}
-                Ok(Ok(Err(error))) => log::error(&label, Some(log::error_value(&error))),
-                Ok(Err(join)) => log::error(&label, Some(json!(join.to_string()))),
-                // The handler keeps running in the background, as with Telegraf's pTimeout.
-                Err(_) => log::error(
-                    &label,
-                    Some(json!(format!(
-                        "Promise timed out after {} milliseconds",
-                        settings.handler_timeout_ms
-                    ))),
-                ),
-            }
+            });
         }
     };
 
@@ -200,6 +207,12 @@ async fn run() -> ExitCode {
                 .await;
             queue.stop_starting();
             let deadline = tokio::time::Instant::now() + SHUTDOWN_GRACE;
+            // Updates already taken from Telegram are confirmed: let their handlers finish.
+            while handler_slots.available_permits() < MAX_CONCURRENT_HANDLERS
+                && tokio::time::Instant::now() < deadline
+            {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
             while queue.active_count() > 0 && tokio::time::Instant::now() < deadline {
                 tokio::time::sleep(Duration::from_millis(250)).await;
             }
