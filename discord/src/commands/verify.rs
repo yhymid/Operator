@@ -21,7 +21,7 @@ use operator_common::time::{now_iso, parse_iso};
 pub const VERIFY_BUTTON_CUSTOM_ID: &str = "verify_button_v1";
 const VERIFY_PANEL_TITLE: &str = "Weryfikacja";
 const VERIFY_PANEL_BODY: &str =
-    "Kliknij przycisk ponizej, aby otrzymac role Verified na jeden miesiac kalendarzowy.";
+    "Kliknij przycisk poniżej, aby otrzymać rolę Verified na jeden miesiąc kalendarzowy.";
 
 fn panel_payload() -> Value {
     json!({
@@ -123,17 +123,17 @@ async fn inspect_panel(
         })
         .unwrap_or(false);
     if !channel_ok {
-        return ("mismatch (kanal nie istnieje)", false);
+        return ("mismatch (kanał nie istnieje)", false);
     }
     let Some(message_id) = discord::parse_id::<MessageMarker>(message) else {
-        return ("mismatch (wiadomosc nie istnieje)", false);
+        return ("mismatch (wiadomość nie istnieje)", false);
     };
     let Some(channel_id) = channel_id else {
-        return ("mismatch (kanal nie istnieje)", false);
+        return ("mismatch (kanał nie istnieje)", false);
     };
     match app.http.message(channel_id, message_id).await {
         Ok(_) => ("ok", true),
-        Err(_) => ("mismatch (wiadomosc nie istnieje)", false),
+        Err(_) => ("mismatch (wiadomość nie istnieje)", false),
     }
 }
 
@@ -162,7 +162,7 @@ async fn status_lines(app: &App, guild_id: &str) -> Vec<String> {
         format!("Panel status: {panel_state}"),
         format!("Custom ID: {}", s.panel_custom.as_deref().unwrap_or("brak")),
         format!(
-            "Wyjatki: {}{}",
+            "Wyjątki: {}{}",
             s.exceptions.len(),
             if s.exceptions.is_empty() {
                 String::new()
@@ -202,7 +202,7 @@ fn validate_manageable(
     position: i64,
 ) -> Result<(), &'static str> {
     if app.cache.member(guild_id, app.bot_id).is_none() {
-        return Err("Nie moge sprawdzic uprawnien bota.");
+        return Err("Nie mogę sprawdzić uprawnień bota.");
     }
     let perms = discord::bot_root_permissions(app, guild_id).unwrap_or(Permissions::empty());
     if !discord::has(perms, Permissions::MANAGE_ROLES) {
@@ -210,7 +210,7 @@ fn validate_manageable(
     }
     if position >= discord::highest_role_position(app, guild_id, app.bot_id) {
         return Err(
-            "Nie moge nadawac ani odbierac tej roli (jest wyzej lub rowno najwyzszej roli bota).",
+            "Nie mogę nadawać ani odbierać tej roli (jest wyżej lub równo najwyższej roli bota).",
         );
     }
     Ok(())
@@ -272,13 +272,13 @@ async fn send_or_resend_panel(
     }
     let Some((channel_id, _)) = channel.filter(|(_, kind)| discord::is_text_based(*kind)) else {
         return ix
-            .edit_content("Ten kanal nie obsluguje wiadomosci tekstowych.")
+            .edit_content("Ten kanał nie obsługuje wiadomości tekstowych.")
             .await;
     };
     if let Some(issue) = channel_permission_issue(app, channel_id) {
         return ix
             .edit_content(format!(
-                "Bot nie moze wyslac panelu na ten kanal. Brakuje: {issue}."
+                "Bot nie może wysłać panelu na ten kanał. Brakuje: {issue}."
             ))
             .await;
     }
@@ -287,7 +287,7 @@ async fn send_or_resend_panel(
         Err(error) => {
             return ix
                 .edit_content(format!(
-                    "Nie udalo sie wyslac panelu verify: {}",
+                    "Nie udało się wysłać panelu verify: {}",
                     discord::err_text(&error)
                 ))
                 .await;
@@ -328,16 +328,16 @@ async fn send_or_resend_panel(
     let mut lines = vec![if reason == "setup" {
         format!("Panel verify utworzony na <#{channel_id}> dla roli <@&{role_id}>.")
     } else {
-        format!("Panel verify wyslany ponownie na <#{channel_id}> dla roli <@&{role_id}>.")
+        format!("Panel verify wysłany ponownie na <#{channel_id}> dla roli <@&{role_id}>.")
     }];
     if deleted_previous {
         lines.push(
-            "Poprzedni panel zostal usuniety, zeby nie zostawiac martwego przycisku.".to_owned(),
+            "Poprzedni panel został usunięty, żeby nie zostawiać martwego przycisku.".to_owned(),
         );
     }
     if role_changed {
         lines.push(
-            "Aktywne challenge zostaly wyczyszczone, bo zmienila sie rola verify.".to_owned(),
+            "Aktywne challenge zostały wyczyszczone, bo zmieniła się rola verify.".to_owned(),
         );
     }
     lines.push(String::new());
@@ -518,7 +518,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .await;
     };
     if !ix.member_has(Permissions::ADMINISTRATOR) {
-        return ix.reply_ephemeral("Brak uprawnien Administratora.").await;
+        return ix.reply_ephemeral("Brak uprawnień Administratora.").await;
     }
     let app = ix.app;
     let guild = guild_id.to_string();
@@ -543,7 +543,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let state = safe_state(app, &guild);
             let Some(role_raw) = state.role_id.clone() else {
                 return ix
-                    .reply_ephemeral("Brak skonfigurowanej roli verify. Najpierw uzyj `/verify mode:setup rola:<rola>`.")
+                    .reply_ephemeral("Brak skonfigurowanej roli verify. Najpierw użyj `/verify mode:setup rola:<rola>`.")
                     .await;
             };
             let role = discord::parse_id::<RoleMarker>(&role_raw);
@@ -589,7 +589,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     "lockouts": lockouts,
                 }),
             );
-            let mut notes = vec![format!("Dodano <@{uid}> do wyjatkow verify.")];
+            let mut notes = vec![format!("Dodano <@{uid}> do wyjątków verify.")];
             let role = state
                 .role_id
                 .as_deref()
@@ -597,7 +597,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             if let (Some(member), Some(role)) = (&member, role)
                 && !member.roles.contains(&role)
             {
-                notes.push("Uwaga: uzytkownik nie ma teraz roli verify, wiec wyjatek nie nadaje jej automatycznie.".to_owned());
+                notes.push("Uwaga: użytkownik nie ma teraz roli verify, więc wyjątek nie nadaje jej automatycznie.".to_owned());
             }
             reply_with_status(ix, &guild, notes).await
         }
@@ -633,11 +633,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 json!({ "exceptions": exceptions, "expirations": expirations }),
             );
             let notes = vec![
-                format!("Usunieto <@{uid}> z wyjatkow verify."),
+                format!("Usunięto <@{uid}> z wyjątków verify."),
                 if has_verify_role {
-                    "Uzytkownik zachowal role verify i dostal nowa expiracje od teraz.".to_owned()
+                    "Użytkownik zachował rolę verify i dostał nową expirację od teraz.".to_owned()
                 } else {
-                    "Jesli uzytkownik nie ma roli verify, nic nie zostalo mu automatycznie nadane."
+                    "Jeśli użytkownik nie ma roli verify, nic nie zostało mu automatycznie nadane."
                         .to_owned()
                 },
             ];
@@ -675,7 +675,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         Ok(_) => removed_role = true,
                         Err(error) => {
                             removal_issue = Some(format!(
-                                "Nie udalo sie odebrac roli: {}",
+                                "Nie udało się odebrać roli: {}",
                                 discord::api_error_message(&error)
                             ));
                         }
@@ -698,16 +698,16 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let mut notes = vec![
                 format!("Wygaszono verify dla <@{uid}>."),
                 if removed_role {
-                    "Rola verify zostala odebrana od razu.".to_owned()
+                    "Rola verify została odebrana od razu.".to_owned()
                 } else if role.is_some() {
-                    "Stan cache zostal wyczyszczony. Rola nie zostala odebrana, bo uzytkownik jej nie mial albo nie dalo sie tego zrobic teraz.".to_owned()
+                    "Stan cache został wyczyszczony. Rola nie została odebrana, bo użytkownik jej nie miał albo nie dało się tego zrobić teraz.".to_owned()
                 } else {
-                    "Stan cache zostal wyczyszczony. Skonfigurowana rola verify nie istnieje."
+                    "Stan cache został wyczyszczony. Skonfigurowana rola verify nie istnieje."
                         .to_owned()
                 },
             ];
             if state.exceptions.contains(&uid) {
-                notes.push("Uwaga: uzytkownik nadal jest na liscie wyjatkow. Jesli ma przechodzic normalny verify, uzyj tez `exception_remove`.".to_owned());
+                notes.push("Uwaga: użytkownik nadal jest na liście wyjątków. Jeśli ma przechodzić normalny verify, użyj też `exception_remove`.".to_owned());
             }
             if let Some(issue) = removal_issue {
                 notes.push(format!("Uwaga: {issue}"));
@@ -717,12 +717,12 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         "cleanup_state" => {
             let c = run_cleanup_state(app, guild_id).await;
             let notes = vec![
-                "Cleanup verify zakonczony.".to_owned(),
-                format!("Usuniete wyjatki poza serwerem: {}", c.removed_exceptions),
-                format!("Usuniete stare expiracje: {}", c.removed_expirations),
-                format!("Naprawione brakujace expiracje: {}", c.repaired_expirations),
-                format!("Usuniete stare challenge: {}", c.removed_challenges),
-                format!("Usuniete stare blokady: {}", c.removed_lockouts),
+                "Cleanup verify zakończony.".to_owned(),
+                format!("Usunięte wyjątki poza serwerem: {}", c.removed_exceptions),
+                format!("Usunięte stare expiracje: {}", c.removed_expirations),
+                format!("Naprawione brakujące expiracje: {}", c.repaired_expirations),
+                format!("Usunięte stare challenge: {}", c.removed_challenges),
+                format!("Usunięte stare blokady: {}", c.removed_lockouts),
                 format!("Odebrane role po przeterminowaniu: {}", c.removed_roles),
                 format!(
                     "Panel cleanup: {}",

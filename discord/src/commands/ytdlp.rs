@@ -124,7 +124,7 @@ fn normalize_url(value: &str) -> Result<String, &'static str> {
     }
     let parsed = url::Url::parse(raw).map_err(|_| "Podaj poprawny adres URL.")?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err("Dozwolone sa tylko adresy http:// i https://.");
+        return Err("Dozwolone są tylko adresy http:// i https://.");
     }
     Ok(parsed.to_string())
 }
@@ -199,7 +199,7 @@ async fn run(
         Some(s) if s.success() => Ok(stdout),
         None => Err(format!("Przekroczono limit czasu ({program})")),
         Some(_) => {
-            Err(last_line(&stderr).unwrap_or_else(|| format!("{program} zakonczyl sie bledem")))
+            Err(last_line(&stderr).unwrap_or_else(|| format!("{program} zakończył się błędem")))
         }
     }
 }
@@ -483,7 +483,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     .await
     .unwrap_or_else(|_| {
         Err(anyhow!(
-            "Przekroczono limit czasu (Discord pozwala odpowiedziec w ciagu 15 minut)."
+            "Przekroczono limit czasu (Discord pozwala odpowiedzieć w ciągu 15 minut)."
         ))
     });
     if let Err(error) = tokio::fs::remove_dir_all(&temp_dir).await {
@@ -555,7 +555,7 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
                 settings.max_download_bytes / (1024 * 1024)
             );
         }
-        bail!("yt-dlp nie zwrocil pobranego pliku.");
+        bail!("yt-dlp nie zwrócił pobranego pliku.");
     };
     let file = ensure_compatible(settings, &file).await?;
     let size = tokio::fs::metadata(&file).await?.len();
@@ -625,7 +625,7 @@ fn friendly_error(details: &str) -> String {
 fn definition() -> Value {
     serde_json::json!({
         "name": "ytdlp",
-        "description": "Pobiera video z podanego adresu i wysyla je na kanal",
+        "description": "Pobiera video z podanego adresu i wysyła je na kanał",
         "dm_permission": false,
         "options": [{ "type": 3, "name": "url", "description": "Adres URL video", "required": true }]
     })

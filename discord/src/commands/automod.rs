@@ -31,14 +31,14 @@ fn normalize_rule_value(kind: &str, value: &str) -> Result<String, String> {
         "word" => {
             let normalized = compact_whitespace(value).to_lowercase();
             if normalized.is_empty() {
-                return Err("Regula slowa nie moze byc pusta.".to_owned());
+                return Err("Reguła słowa nie może być pusta.".to_owned());
             }
             Ok(normalized)
         }
         "regex" => {
             let normalized = value.trim();
             if normalized.is_empty() {
-                return Err("Regula regex nie moze byc pusta.".to_owned());
+                return Err("Reguła regex nie może być pusta.".to_owned());
             }
             jsregex::compile(normalized, false)
                 .map_err(|error| format!("Niepoprawny regex: {error}"))?;
@@ -47,14 +47,14 @@ fn normalize_rule_value(kind: &str, value: &str) -> Result<String, String> {
         "allowed_domain" => {
             let raw = value.trim().to_lowercase();
             if raw.is_empty() {
-                return Err("Dozwolona domena nie moze byc pusta.".to_owned());
+                return Err("Dozwolona domena nie może być pusta.".to_owned());
             }
             let candidate = if raw.contains("://") {
                 raw
             } else {
                 format!("https://{raw}")
             };
-            let invalid = || "Niepoprawna domena. Uzyj np. `example.com`.".to_owned();
+            let invalid = || "Niepoprawna domena. Użyj np. `example.com`.".to_owned();
             let host = url::Url::parse(&candidate)
                 .ok()
                 .and_then(|u| u.host_str().map(str::to_lowercase))
@@ -65,7 +65,7 @@ fn normalize_rule_value(kind: &str, value: &str) -> Result<String, String> {
             }
             Ok(normalized)
         }
-        other => Err(format!("Nieznany typ reguly: {other}")),
+        other => Err(format!("Nieznany typ reguły: {other}")),
     }
 }
 
@@ -228,7 +228,7 @@ fn mutate_rule(app: &App, kind: &str, raw: &str, action: &str) -> Result<Mutatio
     let mut cfg = config::read(&app.paths.config_path).map_err(|e| e.to_string())?;
     let mut rules = managed_rules(&cfg);
     let Some((_, current)) = rules.iter_mut().find(|(k, _)| *k == kind) else {
-        return Err(format!("Nieznany typ reguly: {kind}"));
+        return Err(format!("Nieznany typ reguły: {kind}"));
     };
     let key = |v: &str| {
         if kind == "regex" {
@@ -245,7 +245,7 @@ fn mutate_rule(app: &App, kind: &str, raw: &str, action: &str) -> Result<Mutatio
         ("remove", Some(index)) => {
             current.remove(index);
         }
-        _ => return Err(format!("Nieznana akcja reguly: {action}")),
+        _ => return Err(format!("Nieznana akcja reguły: {action}")),
     }
     let count = current.len();
     if !cfg["automod"].is_object() {
@@ -273,7 +273,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .await;
     }
     if !ix.member_has(Permissions::ADMINISTRATOR) {
-        return ix.reply_ephemeral("Brak uprawnien Administratora.").await;
+        return ix.reply_ephemeral("Brak uprawnień Administratora.").await;
     }
     let app = ix.app;
     let opts = ix.opts();
@@ -290,7 +290,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .to_lowercase();
             if kind != "all" && rule_meta(&kind).is_none() {
                 return ix
-                    .reply_ephemeral(format!("Nieznany typ regul: `{kind}`."))
+                    .reply_ephemeral(format!("Nieznany typ reguł: `{kind}`."))
                     .await;
             }
             match config::read(&app.paths.config_path) {
@@ -307,7 +307,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 Err(error) => {
                     ix.reply_ephemeral(config::format_config_error(
                         &error,
-                        "Nie mozna odczytac config.json. ",
+                        "Nie można odczytać config.json. ",
                     ))
                     .await
                 }
@@ -322,28 +322,28 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let raw = opts.string("value").unwrap_or_default();
             let Some((label, _)) = rule_meta(&kind) else {
                 return ix
-                    .reply_ephemeral(format!("Nieznany typ regul: `{kind}`."))
+                    .reply_ephemeral(format!("Nieznany typ reguł: `{kind}`."))
                     .await;
             };
             match mutate_rule(app, &kind, &raw, sub) {
                 Ok(Mutation::Unchanged(reason, value, count)) => {
                     let message = if reason == "exists" {
-                        format!("{label}: `{value}` juz istnieje. Nic nie zmieniono.")
+                        format!("{label}: `{value}` już istnieje. Nic nie zmieniono.")
                     } else {
-                        format!("{label}: `{value}` nie istnieje. Nic nie usunieto.")
+                        format!("{label}: `{value}` nie istnieje. Nic nie usunięto.")
                     };
-                    ix.reply_ephemeral(format!("{message}\nAktualna liczba wpisow: {count}"))
+                    ix.reply_ephemeral(format!("{message}\nAktualna liczba wpisów: {count}"))
                         .await
                 }
                 Ok(Mutation::Changed(value, count)) => {
                     let verb = if sub == "add" { "Dodano" } else { "Usunieto" };
                     ix.reply_ephemeral(format!(
-                        "{verb} regule {label}: `{value}`\nAktualna liczba wpisow: {count}"
+                        "{verb} regułę {label}: `{value}`\nAktualna liczba wpisów: {count}"
                     ))
                     .await
                 }
                 Err(error) => {
-                    ix.reply_ephemeral(format!("Zmiana reguly nie powiodla sie. {error}"))
+                    ix.reply_ephemeral(format!("Zmiana reguły nie powiodła się. {error}"))
                         .await
                 }
             }
@@ -364,7 +364,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             if kind != "live" {
                 let Some(raw) = opts.string("value").filter(|v| !v.is_empty()) else {
                     return ix
-                        .reply_ephemeral("Dla testu konkretnej reguly podaj tez `value`.")
+                        .reply_ephemeral("Dla testu konkretnej reguły podaj też `value`.")
                         .await;
                 };
                 match normalize_rule_value(&kind, &raw) {
@@ -377,14 +377,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .test_content(&content, &kind, candidate.as_deref());
             let mut lines = Vec::new();
             if kind == "live" {
-                lines.push("AutoMod test: aktywne reguly".to_owned());
+                lines.push("AutoMod test: aktywne reguły".to_owned());
                 lines.push(format!("Content: `{content}`"));
                 match &result.violation {
                     Some(v) => {
                         lines.push(format!("Matched: {}", v.rule));
                         lines.push(format!("Details: {}", v.details));
                     }
-                    None => lines.push("Result: brak dopasowania w aktywnych regulach.".to_owned()),
+                    None => lines.push("Result: brak dopasowania w aktywnych regułach.".to_owned()),
                 }
             } else {
                 let (label, _) = rule_meta(&kind).unwrap_or(("?", "?"));
@@ -393,10 +393,10 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 lines.push(format!("Content: `{content}`"));
                 match &result.violation {
                     Some(v) => {
-                        lines.push(format!("Result: trafia w te regule ({}).", v.rule));
+                        lines.push(format!("Result: trafia w tę regułę ({}).", v.rule));
                         lines.push(format!("Details: {}", v.details));
                     }
-                    None => lines.push("Result: ta tresc nie trafia w te regule.".to_owned()),
+                    None => lines.push("Result: ta treść nie trafia w tę regułę.".to_owned()),
                 }
             }
             if let Some(note) = result.note {

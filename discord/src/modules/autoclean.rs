@@ -658,7 +658,7 @@ impl AutoClean {
             let message = result
                 .error
                 .take()
-                .unwrap_or_else(|| "Kanal nie istnieje lub nie jest tekstowy".to_owned());
+                .unwrap_or_else(|| "Kanał nie istnieje lub nie jest tekstowy".to_owned());
             tracing::error!("Blad kanalu {channel_id}: {message}");
             result.error = Some(message);
             return result;
@@ -875,7 +875,7 @@ impl AutoClean {
         let template = config::at(&cfg, &["notifyBeforeDelete", "message"])
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
-            .unwrap_or("Za {minutes} minut kanal zostanie wyczyszczony.");
+            .unwrap_or("Za {minutes} minut kanał zostanie wyczyszczony.");
         let text = template.replace("{minutes}", &minutes.to_string());
 
         for target in targets {

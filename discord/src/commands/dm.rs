@@ -10,10 +10,10 @@ const BULK_DM_CONFIRM_THRESHOLD: usize = 10;
 fn normalize_message(value: &str) -> Result<String, &'static str> {
     let text = value.trim();
     if text.is_empty() {
-        return Err("Wiadomosc nie moze byc pusta.");
+        return Err("Wiadomość nie może być pusta.");
     }
     if discord::js_len(text) > 2000 {
-        return Err("Wiadomosc jest za dluga. Limit DM to 2000 znakow.");
+        return Err("Wiadomość jest za długa. Limit DM to 2000 znaków.");
     }
     Ok(text.to_owned())
 }
@@ -28,7 +28,7 @@ fn failure_preview(failures: &[(String, String)], limit: usize) -> String {
     if failures.len() <= limit {
         preview
     } else {
-        format!("{preview}\n... i jeszcze {} bledow", failures.len() - limit)
+        format!("{preview}\n... i jeszcze {} błędów", failures.len() - limit)
     }
 }
 
@@ -39,7 +39,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .await;
     };
     if !ix.member_has(Permissions::ADMINISTRATOR) {
-        return ix.reply_ephemeral("Brak uprawnien Administratora.").await;
+        return ix.reply_ephemeral("Brak uprawnień Administratora.").await;
     }
     let opts = ix.opts();
     let target_user = opts.user("user");
@@ -47,7 +47,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let confirm = opts.boolean("confirm") == Some(true);
     if target_user.is_some() == target_role.is_some() {
         return ix
-            .reply_ephemeral("Podaj dokladnie jedno pole targetu: `user` albo `role`.")
+            .reply_ephemeral("Podaj dokładnie jedno pole targetu: `user` albo `role`.")
             .await;
     }
     let message = match normalize_message(&opts.string("message").unwrap_or_default()) {
@@ -60,12 +60,12 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     if let Some(user) = target_user {
         return match discord::send_dm(ix.app, user.id, &message).await {
             Ok(()) => {
-                ix.edit_content(format!("Wyslano DM do <@{}>.", user.id))
+                ix.edit_content(format!("Wysłano DM do <@{}>.", user.id))
                     .await
             }
             Err(error) => {
                 ix.edit_content(format!(
-                    "Nie udalo sie wyslac DM do <@{}>: {}",
+                    "Nie udało się wysłać DM do <@{}>: {}",
                     user.id,
                     discord::err_text(&error)
                 ))
@@ -79,7 +79,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
 
     let Some(members) = discord::fetch_all_members(ix.app, guild_id).await else {
         return ix
-            .edit_content("Nie udalo sie pobrac listy czlonkow serwera.")
+            .edit_content("Nie udało się pobrać listy członków serwera.")
             .await;
     };
     let targets: Vec<_> = members
@@ -90,7 +90,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     if targets.is_empty() {
         return ix
             .edit_content(format!(
-                "Rola <@&{}> nie ma zadnych odbiorcow do wysylki.",
+                "Rola <@&{}> nie ma żadnych odbiorców do wysyłki.",
                 role.id
             ))
             .await;
@@ -106,17 +106,17 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .edit_content(
                 [
                     format!(
-                        "Ta akcja wysle DM do {} osob z roli <@&{}>.",
+                        "Ta akcja wyśle DM do {} osób z roli <@&{}>.",
                         targets.len(),
                         role.id
                     ),
-                    "Dla bezpieczenstwa masowa wysylka wymaga dodatkowego potwierdzenia."
+                    "Dla bezpieczeństwa masowa wysyłka wymaga dodatkowego potwierdzenia."
                         .to_owned(),
                     String::new(),
-                    "Podglad odbiorcow:".to_owned(),
+                    "Podgląd odbiorców:".to_owned(),
                     preview,
                     String::new(),
-                    "Uruchom komende ponownie z `confirm:true`, jesli chcesz kontynuowac."
+                    "Uruchom komendę ponownie z `confirm:true`, jeśli chcesz kontynuować."
                         .to_owned(),
                 ]
                 .join("\n"),
@@ -133,15 +133,15 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         }
     }
     let mut lines = vec![
-        format!("Wysylka DM do roli <@&{}> zakonczona.", role.id),
+        format!("Wysyłka DM do roli <@&{}> zakończona.", role.id),
         format!("Targety: {}", targets.len()),
         format!("Sukces: {sent}"),
-        format!("Bledy: {}", failures.len()),
+        format!("Błędy: {}", failures.len()),
     ];
     let preview = failure_preview(&failures, 5);
     if !preview.is_empty() {
         lines.push(String::new());
-        lines.push("Podglad bledow:".to_owned());
+        lines.push("Podgląd błędów:".to_owned());
         lines.push(preview);
     }
     ix.edit_content(lines.join("\n")).await

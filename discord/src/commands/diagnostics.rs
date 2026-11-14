@@ -103,16 +103,16 @@ fn check(perms: Option<Permissions>, checks: Checks, reason: &'static str) -> Pe
 
 fn channel_snapshot(app: &App, channel: Option<Id<ChannelMarker>>, checks: Checks) -> PermSnapshot {
     let Some(channel) = channel.filter(|c| app.cache.channel(*c).is_some()) else {
-        return check(None, checks, "kanal niedostepny");
+        return check(None, checks, "kanał niedostępny");
     };
     let guild = app.cache.channel(channel).and_then(|c| c.guild_id);
     if guild.is_none_or(|g| app.cache.member(g, app.bot_id).is_none()) {
-        return check(None, checks, "bot member niedostepny");
+        return check(None, checks, "bot member niedostępny");
     }
     check(
         discord::bot_channel_permissions(app, channel),
         checks,
-        "nie mozna odczytac uprawnien",
+        "nie można odczytać uprawnień",
     )
 }
 
@@ -170,7 +170,7 @@ async fn inspect_music(app: &App, guild_id: Option<Id<GuildMarker>>) -> MusicSna
     if !d.initialized || !d.usable || connected_nodes == 0 {
         issues.push(issue(
             Severity::Critical,
-            "Lavalink jest offline. /music play nie zadziala, dopoki node nie wstanie.",
+            "Lavalink jest offline. /music play nie zadziała, dopóki node nie wstanie.",
         ));
     }
     if !d.has_explicit_password {
@@ -185,11 +185,11 @@ async fn inspect_music(app: &App, guild_id: Option<Id<GuildMarker>>) -> MusicSna
     {
         issues.push(issue(
             Severity::Warning,
-            "Bot ma aktywna sesje music, ale player nie wyglada na polaczony z voice.",
+            "Bot ma aktywną sesję music, ale player nie wygląda na połączony z voice.",
         ));
     }
     if !d.queue_state_dir_exists {
-        issues.push(issue(Severity::Warning, "Katalog cache kolejki nie istnieje. Restore queue nie zapisze stanu, dopoki nie powstanie."));
+        issues.push(issue(Severity::Warning, "Katalog cache kolejki nie istnieje. Restore queue nie zapisze stanu, dopóki nie powstanie."));
     }
     let session = d.guild_session.as_ref();
     let voice_summary = match session.and_then(|s| s.voice_channel_id.map(|c| (s, c))) {
@@ -243,11 +243,11 @@ async fn inspect_music(app: &App, guild_id: Option<Id<GuildMarker>>) -> MusicSna
         format!("Voice: {voice_summary}"),
         match session.and_then(|s| s.current_track_title.as_ref().map(|t| (s, t))) {
             Some((s, title)) => format!(
-                "Aktualny utwor: {} | kolejka: {}",
+                "Aktualny utwór: {} | kolejka: {}",
                 inline(title, 120),
                 s.queue_size
             ),
-            None => "Aktualny utwor: brak".to_owned(),
+            None => "Aktualny utwór: brak".to_owned(),
         },
         format!(
             "Voice status na kanale: {}",
@@ -329,25 +329,25 @@ fn inspect_logs(app: &App, guild_id: Id<GuildMarker>) -> Section {
     if !state.enabled {
         issues.push(issue(
             Severity::Warning,
-            "Logi sa wylaczone na tym serwerze.",
+            "Logi są wyłączone na tym serwerze.",
         ));
     }
     if state.enabled && state.channel_id.is_none() {
         issues.push(issue(
             Severity::Critical,
-            "Logi sa wlaczone, ale kanal logow nie jest ustawiony.",
+            "Logi są włączone, ale kanał logów nie jest ustawiony.",
         ));
     }
     if state.enabled && state.channel_id.is_some() && channel_kind.is_none() {
         issues.push(issue(
             Severity::Critical,
-            "Ustawiony kanal logow nie istnieje albo bot nie moze go pobrac.",
+            "Ustawiony kanał logów nie istnieje albo bot nie może go pobrać.",
         ));
     }
     if state.enabled && channel_kind.is_some_and(|k| !discord::is_text_based(k)) {
         issues.push(issue(
             Severity::Critical,
-            "Kanal logow istnieje, ale nie obsluguje wiadomosci tekstowych.",
+            "Kanał logów istnieje, ale nie obsługuje wiadomości tekstowych.",
         ));
     }
     if state.enabled
@@ -356,7 +356,7 @@ fn inspect_logs(app: &App, guild_id: Id<GuildMarker>) -> Section {
         issues.push(issue(
             Severity::Critical,
             format!(
-                "Bot nie moze wysylac logow do {}. Brakuje: {}.",
+                "Bot nie może wysyłać logów do {}. Brakuje: {}.",
                 mention(channel.filter(|_| channel_kind.is_some()), "kanal"),
                 p.missing.join(", ")
             ),
@@ -365,11 +365,11 @@ fn inspect_logs(app: &App, guild_id: Id<GuildMarker>) -> Section {
     if state.enabled && d.can_view_audit_log == Some(false) {
         issues.push(issue(
             Severity::Warning,
-            "Brak View Audit Log. W logach moderacyjnych aktor bedzie czesto unknown.",
+            "Brak View Audit Log. W logach moderacyjnych aktor będzie często unknown.",
         ));
     }
     if !d.logs_dir_exists {
-        issues.push(issue(Severity::Warning, "Katalog plikow logow nie istnieje. Powstanie dopiero przy pierwszym zapisie albo brakuje dostepu do dysku."));
+        issues.push(issue(Severity::Warning, "Katalog plików logów nie istnieje. Powstanie dopiero przy pierwszym zapisie albo brakuje dostępu do dysku."));
     }
     let lines = vec![
         format!(
@@ -381,7 +381,7 @@ fn inspect_logs(app: &App, guild_id: Id<GuildMarker>) -> Section {
             }
         ),
         format!(
-            "Stan: {} | kanal: {}",
+            "Stan: {} | kanał: {}",
             if state.enabled {
                 "wlaczone"
             } else {
@@ -393,9 +393,9 @@ fn inspect_logs(app: &App, guild_id: Id<GuildMarker>) -> Section {
                 .map_or("brak".to_owned(), |c| format!("<#{c}>"))
         ),
         if state.channel_id.is_some() {
-            format!("Kanal logow perms: {}", render(perms.as_ref()))
+            format!("Kanał logów perms: {}", render(perms.as_ref()))
         } else {
-            "Kanal logow perms: brak (kanal nieustawiony)".to_owned()
+            "Kanał logów perms: brak (kanał nieustawiony)".to_owned()
         },
         format!(
             "Audit log access: {}",
@@ -455,7 +455,7 @@ fn inspect_permissions(
     let guild_snapshot = check(
         discord::bot_root_permissions(app, guild_id).filter(|_| bot_present),
         GUILD_CHECKS,
-        "nie mozna odczytac uprawnien",
+        "nie można odczytać uprawnień",
     );
     let target_checks = if target.is_some_and(|(_, k)| discord::is_voice_based(k)) {
         VOICE_CHECKS
@@ -488,7 +488,7 @@ fn inspect_permissions(
         .as_ref()
         .map(|_| channel_snapshot(app, log_channel, TEXT_CHECKS));
 
-    let target_label = mention(target.map(|t| t.0), "aktualny kanal");
+    let target_label = mention(target.map(|t| t.0), "aktualny kanał");
     let log_label = state
         .channel_id
         .as_deref()
@@ -509,7 +509,7 @@ fn inspect_permissions(
         issues.push(issue(
             Severity::Critical,
             format!(
-                "Na kanale logow {log_label} brakuje: {}.",
+                "Na kanale logów {log_label} brakuje: {}.",
                 s.missing.join(", ")
             ),
         ));
@@ -525,29 +525,29 @@ fn inspect_permissions(
     if state.enabled && guild_snapshot.missing.contains(&"View Audit Log") {
         issues.push(issue(
             Severity::Warning,
-            "Guild-wide brakuje View Audit Log, wiec logi moderacyjne beda niepelne.",
+            "Guild-wide brakuje View Audit Log, więc logi moderacyjne będą niepełne.",
         ));
     }
     if guild_snapshot.missing.contains(&"Manage Roles") {
         issues.push(issue(
             Severity::Warning,
-            "Guild-wide brakuje Manage Roles, wiec verify i role automation beda ograniczone.",
+            "Guild-wide brakuje Manage Roles, więc verify i role automation będą ograniczone.",
         ));
     }
     let lines = vec![
         format!("Guild-wide: {}", render(Some(&guild_snapshot))),
         format!(
-            "Kanal diagnostyki {target_label}: {}",
+            "Kanał diagnostyki {target_label}: {}",
             render(Some(&target_snapshot))
         ),
         if state.channel_id.is_some() {
-            format!("Kanal logow {log_label}: {}", render(log_snapshot.as_ref()))
+            format!("Kanał logów {log_label}: {}", render(log_snapshot.as_ref()))
         } else {
-            "Kanal logow: brak konfiguracji".to_owned()
+            "Kanał logów: brak konfiguracji".to_owned()
         },
         match voice {
             Some(v) => format!("Voice <#{v}>: {}", render(voice_snapshot.as_ref())),
-            None => "Voice: brak aktywnego kanalu do sprawdzenia".to_owned(),
+            None => "Voice: brak aktywnego kanału do sprawdzenia".to_owned(),
         },
     ];
     Section { issues, lines }
@@ -583,14 +583,14 @@ fn runtime_section(app: &App) -> Section {
     if owners.ids.is_empty() {
         issues.push(issue(
             Severity::Warning,
-            "Brak OWNER_IDS. Komendy owner-only beda niedostepne.",
+            "Brak OWNER_IDS. Komendy owner-only będą niedostępne.",
         ));
     }
     if !owners.invalid.is_empty() {
         issues.push(issue(
             Severity::Warning,
             format!(
-                "Pominiete niepoprawne OWNER_IDS: {}.",
+                "Pominięte niepoprawne OWNER_IDS: {}.",
                 owners.invalid.join(", ")
             ),
         ));
@@ -627,11 +627,11 @@ pub async fn execute_health(ix: &Ix<'_>) -> Result<()> {
         (
             "Podsumowanie",
             vec![
-                format!("Stan ogolny: {}", badge(level)),
+                format!("Stan ogólny: {}", badge(level)),
                 if level == Severity::Ok {
-                    "Bot wyglada zdrowo. Kluczowe moduly sa gotowe do pracy.".to_owned()
+                    "Bot wygląda zdrowo. Kluczowe moduły są gotowe do pracy.".to_owned()
                 } else {
-                    "Ponizej masz najwazniejsze problemy do sprawdzenia przed dalsza diagnostyka."
+                    "Poniżej masz najważniejsze problemy do sprawdzenia przed dalszą diagnostyką."
                         .to_owned()
                 },
             ],

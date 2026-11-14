@@ -54,7 +54,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 discord::err_text(&error)
             );
             return ix
-                .reply_ephemeral(format!("Nie udalo sie odczytac cache dla ID `{id}`."))
+                .reply_ephemeral(format!("Nie udało się odczytać cache dla ID `{id}`."))
                 .await;
         }
     };
@@ -63,7 +63,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         return ix.reply_ephemeral(wrapped).await;
     }
     ix.reply(json!({
-        "content": format!("Cache jest za dlugi na wiadomosc. Wysylam plik `server-{id}.json`."),
+        "content": format!("Cache jest za długi na wiadomość. Wysyłam plik `server-{id}.json`."),
         "flags": FLAG_EPHEMERAL,
         "files": [discord::file(&format!("server-{id}.json"), pretty.into_bytes())],
     }))

@@ -124,7 +124,7 @@ pub async fn sync_global(
 pub fn format_report(report: &SyncReport) -> Vec<String> {
     match report {
         SyncReport::Global { cleared: true, .. } => {
-            vec!["Globalne komendy zostaly wyczyszczone.".to_owned()]
+            vec!["Globalne komendy zostały wyczyszczone.".to_owned()]
         }
         SyncReport::Global { command_count, .. } => {
             vec![format!(
@@ -137,7 +137,7 @@ pub fn format_report(report: &SyncReport) -> Vec<String> {
         } => {
             let fail = report.failures();
             let mut lines = vec![format!(
-                "Guild sync: komend={payload_count}, serwerow={}, sukces={}, bledy={fail}",
+                "Guild sync: komend={payload_count}, serwerów={}, sukces={}, błędy={fail}",
                 details.len(),
                 details.len() - fail
             )];
@@ -191,7 +191,7 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
                 tracing::error!("Component interaction error: {}", discord::err_text(&error));
                 if !ix.replied() && !ix.deferred() {
                     let _ = ix
-                        .reply_ephemeral("Wystapil blad podczas obslugi panelu.")
+                        .reply_ephemeral("Wystąpił błąd podczas obsługi panelu.")
                         .await;
                 }
             }
@@ -201,7 +201,7 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
                 tracing::error!("Verify captcha modal error: {}", discord::err_text(&error));
                 if !ix.replied() && !ix.deferred() {
                     let _ = ix
-                        .reply_ephemeral("Wystapil blad podczas sprawdzania captcha.")
+                        .reply_ephemeral("Wystąpił błąd podczas sprawdzania captcha.")
                         .await;
                 }
             }
@@ -221,7 +221,7 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
         InteractionType::ApplicationCommand => {
             if let Err(error) = dispatch_command(&ix).await {
                 tracing::error!("Interaction error: {}", discord::err_text(&error));
-                let text = "Wystapil blad podczas wykonywania komendy.";
+                let text = "Wystąpił błąd podczas wykonywania komendy.";
                 let _ = if !ix.replied() && !ix.deferred() {
                     ix.reply_ephemeral(text).await
                 } else {
@@ -316,7 +316,7 @@ mod tests {
         assert_eq!(
             format_report(&report),
             [
-                "Guild sync: komend=12, serwerow=2, sukces=1, bledy=1",
+                "Guild sync: komend=12, serwerów=2, sukces=1, błędy=1",
                 "- B (2): x"
             ]
         );

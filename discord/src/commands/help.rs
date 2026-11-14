@@ -21,7 +21,7 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "`/music mode:remove position:<numer>`",
             "`/music mode:clear|reconnect`",
             "Panel z przyciskami: loop, autoplay, shuffle, EQ/FX.",
-            "`/ytdlp url:<link>` - pobiera video i wysyla je na kanal",
+            "`/ytdlp url:<link>` - pobiera video i wysyła je na kanał",
         ],
         "moderation" => &[
             "### Moderacja",
@@ -35,13 +35,13 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "### Ustawienia",
             "`/settings mode:show`",
             "`/settings mode:show section:<autoclean|automod|verify>`",
-            "`/settings mode:set section:<autoclean|automod|verify> option:<opcja> string_value|integer_value|boolean_value|channel_value|role_value|user_value:<wartosc>`",
+            "`/settings mode:set section:<autoclean|automod|verify> option:<opcja> string_value|integer_value|boolean_value|channel_value|role_value|user_value:<wartość>`",
             "`/health`",
             "`/debug mode:<music|permissions|logs>`",
         ],
         "owner" if !can_use_owner => &[
             "### Owner",
-            "Ta sekcja jest dostepna tylko dla ownera bota.",
+            "Ta sekcja jest dostępna tylko dla ownera bota.",
         ],
         "owner" => &[
             "### Owner",
@@ -54,11 +54,11 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "### Start",
             "`/help section:<sekcja>` - otwiera od razu wybrany obszar",
             "`/music mode:play ...` - odtwarzanie, kolejka i recovery",
-            "`/ytdlp url:<link>` - pobieranie video na kanal",
+            "`/ytdlp url:<link>` - pobieranie video na kanał",
             "`/automod ...`, `/verify ...`, `/logs ...`, `/dm ...` - moderacja, verify i full logs",
             "`/settings ...`, `/health`, `/debug ...` - konfiguracja i diagnostyka",
             "`/announce ...` - planowane i natychmiastowe announcementy",
-            "`/clean ...`, `/cache ...` - narzedzia ownera",
+            "`/clean ...`, `/cache ...` - narzędzia ownera",
         ],
     };
     lines.join("\n")
@@ -89,7 +89,7 @@ pub fn panel_payload(app: &App, user_id: Id<UserMarker>, page: &str) -> Value {
         .collect();
     let content = [
         "## Operator Help".to_owned(),
-        "Interaktywny panel komend. Wybierz sekcje ponizej albo uruchom `/help section:<sekcja>`."
+        "Interaktywny panel komend. Wybierz sekcję poniżej albo uruchom `/help section:<sekcja>`."
             .to_owned(),
         String::new(),
         section_content(&selected, can_use_owner),
@@ -139,7 +139,7 @@ pub async fn handle_component(ix: &Ix<'_>) -> Result<bool> {
         return Ok(false);
     }
     if ix.user_id().to_string() != owner {
-        ix.reply_ephemeral("Ten panel pomocy nalezy do innego uzytkownika. Uzyj /help.")
+        ix.reply_ephemeral("Ten panel pomocy należy do innego użytkownika. Użyj /help.")
             .await?;
         return Ok(true);
     }

@@ -87,7 +87,7 @@ pub fn parse_datetime(input: &str) -> Result<String> {
     let raw = input.trim();
     let caps = re
         .captures(raw)
-        .ok_or_else(|| anyhow!("Uzyj formatu daty `YYYY-MM-DD HH:mm` (UTC)."))?;
+        .ok_or_else(|| anyhow!("Użyj formatu daty `YYYY-MM-DD HH:mm` (UTC)."))?;
     let num = |i: usize| caps[i].parse::<u32>().unwrap_or(u32::MAX);
     let date = NaiveDate::from_ymd_opt(num(1) as i32, num(2), num(3))
         .and_then(|d| d.and_hms_opt(num(4), num(5), 0))
@@ -114,7 +114,7 @@ pub fn normalize_color(value: Option<String>) -> Result<Opt> {
         Opt::Set(raw) => {
             let raw = raw.strip_prefix('#').unwrap_or(&raw);
             if raw.len() != 6 || !raw.chars().all(|c| c.is_ascii_hexdigit()) {
-                bail!("Kolor musi byc w formacie `#RRGGBB` albo `RRGGBB`.");
+                bail!("Kolor musi być w formacie `#RRGGBB` albo `RRGGBB`.");
             }
             Ok(Opt::Set(format!("#{}", raw.to_uppercase())))
         }
@@ -147,7 +147,7 @@ pub fn normalize_profile_name(value: Option<String>) -> Result<Opt> {
             let len = out.chars().count();
             if !(2..=32).contains(&len) {
                 bail!(
-                    "Nazwa profilu po normalizacji musi miec 2-32 znaki: litery, cyfry, `-` albo `_`."
+                    "Nazwa profilu po normalizacji musi mieć 2-32 znaki: litery, cyfry, `-` albo `_`."
                 );
             }
             Ok(Opt::Set(out))
@@ -161,7 +161,7 @@ pub fn normalize_mode(value: Option<String>) -> Result<Opt> {
         Opt::Set(raw) => {
             let raw = raw.to_lowercase();
             if !["message", "embed", "components"].contains(&raw.as_str()) {
-                bail!("Tryb wysylki musi byc jednym z: `message`, `embed`, `components`.");
+                bail!("Tryb wysyłki musi być jednym z: `message`, `embed`, `components`.");
             }
             Ok(Opt::Set(raw))
         }
@@ -173,10 +173,10 @@ pub fn normalize_url(value: Option<String>) -> Result<Opt> {
     match normalize_optional_text(value) {
         Opt::Set(raw) => {
             let url = url::Url::parse(&raw).map_err(|_| {
-                anyhow!("URL przycisku musi byc poprawnym adresem http albo https.")
+                anyhow!("URL przycisku musi być poprawnym adresem http albo https.")
             })?;
             if url.scheme() != "http" && url.scheme() != "https" {
-                bail!("URL przycisku musi zaczynac sie od `http://` albo `https://`.");
+                bail!("URL przycisku musi zaczynać się od `http://` albo `https://`.");
             }
             Ok(Opt::Set(url.to_string()))
         }
@@ -587,7 +587,7 @@ async fn get_or_create_webhook(
     let token = created
         .token
         .clone()
-        .ok_or_else(|| anyhow!("Discord nie zwrocil tokenu webhooka."))?;
+        .ok_or_else(|| anyhow!("Discord nie zwrócił tokenu webhooka."))?;
     let mut webhooks = resolved.state.webhooks;
     webhooks.insert(
         channel.clone(),
@@ -667,7 +667,7 @@ pub async fn send_now(app: &App, guild_id: Id<GuildMarker>, item: &Value) -> Res
                 .channel(*id)
                 .is_some_and(|c| c.guild_id == Some(guild_id) && discord::is_text_based(c.kind))
         })
-        .ok_or_else(|| anyhow!("Docelowy kanal nie istnieje albo nie obsluguje wiadomosci."))?;
+        .ok_or_else(|| anyhow!("Docelowy kanał nie istnieje albo nie obsługuje wiadomości."))?;
     let webhook = get_or_create_webhook(app, &guild_id.to_string(), channel).await?;
     let mut ids = Vec::new();
     for payload in payload_parts(item)? {
@@ -706,7 +706,7 @@ pub async fn edit_message(
     )
     .await;
     let webhook = resolved.webhook.ok_or_else(|| {
-        anyhow!("Nie udalo sie odzyskac webhooka dla juz wyslanego announcementu.")
+        anyhow!("Nie udało się odzyskać webhooka dla już wysłanego announcementu.")
     })?;
 
     let current_channel = value_text(&item["channelId"]).unwrap_or_default();
@@ -743,7 +743,7 @@ pub async fn edit_message(
         });
         let _ = delete_message(app, &guild, &rollback).await;
         bail!(
-            "Przelaczono kanal, ale nie udalo sie usunac poprzedniej publikacji: {}",
+            "Przełączono kanał, ale nie udało się usunąć poprzedniej publikacji: {}",
             discord::err_text(&error)
         );
     }
@@ -773,7 +773,7 @@ pub async fn delete_message(app: &App, guild_id: &str, item: &Value) -> Result<(
     )
     .await;
     let webhook = resolved.webhook.ok_or_else(|| {
-        anyhow!("Nie udalo sie odzyskac webhooka do usuniecia wyslanego announcementu.")
+        anyhow!("Nie udało się odzyskać webhooka do usunięcia wysłanego announcementu.")
     })?;
     delete_parts(app, &webhook, &ids).await
 }

@@ -1153,7 +1153,7 @@ impl FullLogs {
         let (entry, note) = match latest {
             Some((entry, day)) => (
                 entry,
-                format!("Podglad bazuje na ostatnim zapisanym wpisie z dnia `{day}`."),
+                format!("Podgląd bazuje na ostatnim zapisanym wpisie z dnia `{day}`."),
             ),
             None => (
                 json!({
@@ -1165,10 +1165,10 @@ impl FullLogs {
                     "target": { "kind": "guild", "id": guild },
                     "location": null,
                     "summary": "Preview sample entry.",
-                    "details": ["source=preview", "note=Brak zapisanych wpisow, pokazuje przykladowy format."],
+                    "details": ["source=preview", "note=Brak zapisanych wpisów, pokazuje przykładowy format."],
                     "metadata": { "source": "preview:fallback" }
                 }),
-                "Brak zapisanych wpisow. Pokazuje przykladowy format loga.".to_owned(),
+                "Brak zapisanych wpisów. Pokazuję przykładowy format loga.".to_owned(),
             ),
         };
         v2_line_payload(&entry, FLAG_EPHEMERAL, Some(("## Logs Preview", &note)))
@@ -1181,7 +1181,7 @@ impl FullLogs {
         day: &str,
     ) -> anyhow::Result<Option<(PathBuf, String)>> {
         if !is_valid_day_key(day) {
-            anyhow::bail!("Niepoprawny format dnia. Uzyj YYYY-MM-DD.");
+            anyhow::bail!("Niepoprawny format dnia. Użyj YYYY-MM-DD.");
         }
         let guild = guild_id.to_string();
         self.flush_guild(&guild).await;
@@ -1202,7 +1202,7 @@ impl FullLogs {
         self.flush_guild(&guild).await;
         if let Some(day) = day {
             if !is_valid_day_key(day) {
-                anyhow::bail!("Niepoprawny format dnia. Uzyj YYYY-MM-DD.");
+                anyhow::bail!("Niepoprawny format dnia. Użyj YYYY-MM-DD.");
             }
             let path = self.day_path(&guild, day);
             if !path.exists() {

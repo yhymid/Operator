@@ -916,7 +916,7 @@ impl MusicManager {
     fn node(&self) -> Result<&Arc<Node>> {
         self.node
             .as_ref()
-            .ok_or_else(|| anyhow!("Brak dostepnego node Lavalink."))
+            .ok_or_else(|| anyhow!("Brak dostępnego node Lavalink."))
     }
 
     fn usable(&self) -> bool {
@@ -926,7 +926,7 @@ impl MusicManager {
     fn ensure_ready(&self) -> Result<()> {
         if !self.initialized.load(Ordering::SeqCst) || !self.usable() {
             bail!(
-                "Lavalink nie jest polaczony. Sprawdz LAVALINK_HOST/LAVALINK_PORT/LAVALINK_PASSWORD i czy Lavalink v4 dziala."
+                "Lavalink nie jest połączony. Sprawdź LAVALINK_HOST/LAVALINK_PORT/LAVALINK_PASSWORD i czy Lavalink v4 działa."
             );
         }
         Ok(())
@@ -961,7 +961,7 @@ impl MusicManager {
     ) -> Result<()> {
         app.sender
             .command(&UpdateVoiceState::new(guild_id, channel, true, false))
-            .map_err(|e| anyhow!("Nie udalo sie wyslac voice state: {e}"))
+            .map_err(|e| anyhow!("Nie udało się wysłać voice state: {e}"))
     }
 
     async fn push_voice(&self, player: &mut Player) {
@@ -1310,7 +1310,7 @@ impl MusicManager {
                 continue;
             }
             bail!(
-                "Nie udalo sie zmirrorowac utworu Spotify do zrodla odtwarzania. Sprobuj innego utworu albo ponow za chwile."
+                "Nie udało się zmirrorować utworu Spotify do źródła odtwarzania. Spróbuj innego utworu albo ponów za chwilę."
             );
         }
         if replaced > 0 {
@@ -1327,7 +1327,7 @@ impl MusicManager {
         self.ensure_ready()?;
         let raw = compact_whitespace(query);
         if raw.is_empty() {
-            bail!("Podaj link lub fraze do wyszukania.");
+            bail!("Podaj link lub frazę do wyszukania.");
         }
         let mut result: Option<SearchResult> = None;
         if !is_http_url(&raw) {
@@ -1363,7 +1363,7 @@ impl MusicManager {
             .await?;
         if prepared.is_empty() {
             bail!(if playlist {
-                "Nie udalo sie zmirrorowac utworow z tej playlisty Spotify do odtwarzalnych zrodel."
+                "Nie udało się zmirrorować utworów z tej playlisty Spotify do odtwarzalnych źródeł."
             } else {
                 "Nie znaleziono odtwarzalnego wariantu utworu."
             });
@@ -1390,7 +1390,7 @@ impl MusicManager {
             && current_channel != voice_channel_id
         {
             if existing.has_music() {
-                bail!("Bot odtwarza juz muzyke na kanale <#{current_channel}>.");
+                bail!("Bot odtwarza już muzykę na kanale <#{current_channel}>.");
             }
             drop(players);
             self.destroy(app, guild_id, "voice channel changed").await;
@@ -1406,7 +1406,7 @@ impl MusicManager {
             );
         }
         let Some(player) = players.get_mut(&guild_id) else {
-            bail!("Sesja muzyki wygasla.");
+            bail!("Sesja muzyki wygasła.");
         };
         player.idle_generation += 1;
         let session = Session {
@@ -1476,7 +1476,7 @@ impl MusicManager {
         let mut players = self.players.lock().await;
         let player = players
             .get_mut(&session.guild_id)
-            .ok_or_else(|| anyhow!("Sesja muzyki wygasla."))?;
+            .ok_or_else(|| anyhow!("Sesja muzyki wygasła."))?;
         let was_idle = !player.playing && player.current.is_none();
         let position = player.tracks.len() + 1;
         player.tracks.push_back(track.raw.clone());
@@ -1496,12 +1496,12 @@ impl MusicManager {
         tracks: &[PublicTrack],
     ) -> Result<EnqueueManyResult> {
         if tracks.is_empty() {
-            bail!("Nie znaleziono utworow do dodania.");
+            bail!("Nie znaleziono utworów do dodania.");
         }
         let mut players = self.players.lock().await;
         let player = players
             .get_mut(&session.guild_id)
-            .ok_or_else(|| anyhow!("Sesja muzyki wygasla."))?;
+            .ok_or_else(|| anyhow!("Sesja muzyki wygasła."))?;
         let was_idle = !player.playing && player.current.is_none();
         player.tracks.extend(tracks.iter().map(|t| t.raw.clone()));
         if was_idle {
@@ -1848,7 +1848,7 @@ impl MusicManager {
         position: i64,
     ) -> Result<Option<PublicTrack>> {
         if position <= 0 {
-            bail!("Pozycja w kolejce musi byc liczba >= 1.");
+            bail!("Pozycja w kolejce musi być liczbą >= 1.");
         }
         let mut players = self.players.lock().await;
         let Some(player) = players.get_mut(&guild_id).filter(|p| p.has_music()) else {
@@ -1946,7 +1946,7 @@ impl MusicManager {
             player.voice_channel_id
         };
         let channel =
-            channel.ok_or_else(|| anyhow!("Brak zapisanego kanalu glosowego dla tej sesji."))?;
+            channel.ok_or_else(|| anyhow!("Brak zapisanego kanału głosowego dla tej sesji."))?;
         let node = self.node()?;
         if !node.connected() {
             node.reconnect_now();
@@ -1955,7 +1955,7 @@ impl MusicManager {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
             if !node.connected() {
-                bail!("Lavalink node nadal jest offline po probie reconnect.");
+                bail!("Lavalink node nadal jest offline po próbie reconnect.");
             }
         }
         if let Some(player) = self.players.lock().await.get_mut(&guild_id) {
@@ -1991,7 +1991,7 @@ impl MusicManager {
             .map(|t| json!({ "url": t.url, "title": t.title }))
             .collect();
         if tracks.is_empty() {
-            bail!("Brak utworow z linkiem do zapisania.");
+            bail!("Brak utworów z linkiem do zapisania.");
         }
         let count = tracks.len();
         let payload = json!({
@@ -2050,7 +2050,7 @@ impl MusicManager {
             }
         }
         if restored.is_empty() {
-            bail!("Nie udalo sie odtworzyc zadnego utworu z zapisu.");
+            bail!("Nie udało się odtworzyć żadnego utworu z zapisu.");
         }
         self.enqueue_many(&session, &restored).await?;
         let volume = state["volume"]

@@ -86,11 +86,11 @@ fn status_lines(state: &LogsState, channel_status: Option<&str>) -> Vec<String> 
     ]);
     lines.extend(
         [
-            "`/logs mode:setup channel:#kanal`",
+            "`/logs mode:setup channel:#kanał`",
             "`/logs mode:status`",
             "`/logs mode:enable`",
             "`/logs mode:disable`",
-            "`/logs mode:channel channel:#kanal`",
+            "`/logs mode:channel channel:#kanał`",
             "`/logs mode:retention retention_days:30`",
             "`/logs mode:include_bots value:true|false`",
             "`/logs mode:categories`",
@@ -120,7 +120,7 @@ fn categories_lines(state: &LogsState) -> Vec<String> {
             format_category_list(&disabled_list(state), "none")
         ),
         String::new(),
-        "Przyklady:".to_owned(),
+        "Przykłady:".to_owned(),
         "`/logs mode:categories category:message value:false`".to_owned(),
         "`/logs mode:categories category:voice value:true`".to_owned(),
         "`/logs mode:categories category:all value:true`".to_owned(),
@@ -142,7 +142,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     };
     if !ix.member_has(Permissions::ADMINISTRATOR) {
         return ix
-            .reply(panel("Logs", &lines(&["Brak uprawnien Administratora."])))
+            .reply(panel("Logs", &lines(&["Brak uprawnień Administratora."])))
             .await;
     }
     let app = ix.app;
@@ -162,7 +162,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Setup",
-                        &lines(&["Wybrany kanal nie obsluguje wiadomosci tekstowych."]),
+                        &lines(&["Wybrany kanał nie obsługuje wiadomości tekstowych."]),
                     ))
                     .await;
             };
@@ -258,7 +258,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Channel",
-                        &lines(&["Wybrany kanal nie obsluguje wiadomosci tekstowych."]),
+                        &lines(&["Wybrany kanał nie obsługuje wiadomości tekstowych."]),
                     ))
                     .await;
             };
@@ -322,8 +322,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Categories",
                         &lines(&[
-                            "Aby zmienic kategorie, podaj oba pola: `category` i `value`.",
-                            "`value:true` wlacza kategorie, `value:false` ja wylacza.",
+                            "Aby zmienić kategorię, podaj oba pola: `category` i `value`.",
+                            "`value:true` włącza kategorię, `value:false` ją wyłącza.",
                         ]),
                     ))
                     .await;
@@ -334,8 +334,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         .reply(panel(
                             "Logs Categories",
                             &lines(&[
-                                "Dla `category:all` uzyj tylko `value:true`, aby wlaczyc wszystkie kategorie.",
-                                "Jesli chcesz wylaczyc wszystko, uzyj `/logs mode:disable`.",
+                                "Dla `category:all` użyj tylko `value:true`, aby włączyć wszystkie kategorie.",
+                                "Jeśli chcesz wyłączyć wszystko, użyj `/logs mode:disable`.",
                             ]),
                         ))
                         .await;
@@ -343,7 +343,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 app.state
                     .save_logs(&guild, json!({ "disabledCategories": [] }));
                 let next = resolve_logs_state(app, &guild);
-                let mut out = vec!["Wlaczono wszystkie kategorie logow.".to_owned()];
+                let mut out = vec!["Włączono wszystkie kategorie logów.".to_owned()];
                 out.extend(categories_lines(&next));
                 return ix.reply(panel("Logs Categories", &out)).await;
             }
@@ -354,7 +354,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         &[
                             format!("Nieznana kategoria: `{category}`."),
                             format!(
-                                "Dostepne: {}",
+                                "Dostępne: {}",
                                 category_keys().collect::<Vec<_>>().join(", ")
                             ),
                         ],
@@ -377,8 +377,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Categories",
                         &lines(&[
-                            "Nie mozna wylaczyc wszystkich kategorii naraz.",
-                            "Zostaw przynajmniej jedna aktywna albo uzyj `/logs mode:disable`.",
+                            "Nie można wyłączyć wszystkich kategorii naraz.",
+                            "Zostaw przynajmniej jedną aktywną albo użyj `/logs mode:disable`.",
                         ]),
                     ))
                     .await;
@@ -435,7 +435,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     ix.reply(panel(
                         "Logs Export",
                         &[format!(
-                            "Nie udalo sie wyeksportowac logu: {}",
+                            "Nie udało się wyeksportować logu: {}",
                             inline(&discord::err_text(&error), 220)
                         )],
                     ))
@@ -452,7 +452,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         "Logs Purge",
                         &lines(&[
                             "Purge wymaga jawnego potwierdzenia `confirm:true`.",
-                            "Przyklady:",
+                            "Przykłady:",
                             "`/logs mode:purge day:2026-06-02 confirm:true`",
                             "`/logs mode:purge older_than_days:30 confirm:true`",
                         ]),
@@ -493,16 +493,16 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                             if removed.is_empty() {
                                 format!("Nie znaleziono logu dla dnia: `{day}`.")
                             } else {
-                                format!("Usunieto wpis dla dnia: `{day}`.")
+                                format!("Usunięto wpis dla dnia: `{day}`.")
                             }
                         } else {
                             format!(
-                                "Usunieto logi starsze niz **{}** dni.",
+                                "Usunięto logi starsze niż **{}** dni.",
                                 older.unwrap_or(1).max(1)
                             )
                         },
-                        format!("Liczba usunietych plikow: **{}**", removed.len()),
-                        format!("Zakres usunietych dni: {preview}"),
+                        format!("Liczba usuniętych plików: **{}**", removed.len()),
+                        format!("Zakres usuniętych dni: {preview}"),
                     ];
                     if removed.len() > 10 {
                         out.push(format!(
@@ -516,7 +516,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     ix.reply(panel(
                         "Logs Purge",
                         &[format!(
-                            "Purge nie powiodl sie: {}",
+                            "Purge nie powiódł się: {}",
                             inline(&discord::err_text(&error), 220)
                         )],
                     ))
@@ -531,8 +531,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Test",
                         &lines(&[
-                            "Najpierw ustaw kanal i wlacz logs:",
-                            "`/logs mode:setup channel:#kanal`",
+                            "Najpierw ustaw kanał i włącz logs:",
+                            "`/logs mode:setup channel:#kanał`",
                         ]),
                     ))
                     .await;
@@ -541,8 +541,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             ix.reply(panel(
                 "Logs Test",
                 &[
-                    format!("Wyslalem test wpis na <#{channel}>."),
-                    "Sprawdz czy karta Components v2 jest czytelna.".to_owned(),
+                    format!("Wysłałem test wpis na <#{channel}>."),
+                    "Sprawdź czy karta Components v2 jest czytelna.".to_owned(),
                 ],
             ))
             .await

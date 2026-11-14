@@ -60,7 +60,7 @@ fn main() -> ExitCode {
     {
         Ok(runtime) => runtime,
         Err(error) => {
-            eprintln!("Nie mozna uruchomic runtime tokio: {error}");
+            eprintln!("Nie można uruchomić runtime tokio: {error}");
             return ExitCode::FAILURE;
         }
     };
@@ -164,7 +164,7 @@ fn doctor() -> ExitCode {
         });
         if let Err(error) = check {
             errors.push(format!(
-                "Katalogi runtime nie sa gotowe do zapisu: {} ({error})",
+                "Katalogi runtime nie są gotowe do zapisu: {} ({error})",
                 dir.display()
             ));
             break;
@@ -172,11 +172,11 @@ fn doctor() -> ExitCode {
     }
     let owners = owners::resolve(&paths.config_path);
     if owners.ids.is_empty() {
-        warnings.push("Brak OWNER_IDS. Komendy owner-only beda niedostepne.".to_owned());
+        warnings.push("Brak OWNER_IDS. Komendy owner-only będą niedostępne.".to_owned());
     }
     if !owners.invalid.is_empty() {
         warnings.push(format!(
-            "Pominiete niepoprawne OWNER_IDS: {}",
+            "Pominięte niepoprawne OWNER_IDS: {}",
             owners.invalid.join(", ")
         ));
     }
@@ -198,7 +198,7 @@ fn doctor() -> ExitCode {
             }
         ),
     ];
-    for (title, items) in [("Ostrzezenia:", &warnings), ("Bledy:", &errors)] {
+    for (title, items) in [("Ostrzeżenia:", &warnings), ("Błędy:", &errors)] {
         if !items.is_empty() {
             lines.push(String::new());
             lines.push(title.to_owned());

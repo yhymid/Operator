@@ -143,7 +143,7 @@ pub fn panel_payload(snapshot: Option<&Snapshot>) -> Value {
     };
     let queue = snapshot.map_or(&[][..], |s| s.queue.as_slice());
     let next_lines = if queue.is_empty() {
-        "Brak nastepnych utworow.".to_owned()
+        "Brak następnych utworów.".to_owned()
     } else {
         queue
             .iter()
@@ -193,7 +193,7 @@ pub fn panel_payload(snapshot: Option<&Snapshot>) -> Value {
         ),
         format!("Status: **{status}**"),
         format!(
-            "Kanal: {}",
+            "Kanał: {}",
             snapshot
                 .and_then(|s| s.voice_channel_id)
                 .map_or("brak".to_owned(), |c| format!("<#{c}>"))
@@ -235,11 +235,11 @@ pub fn panel_payload(snapshot: Option<&Snapshot>) -> Value {
                     "custom_id": format!("{MUSIC_SELECT_PREFIX}:eq:{guild}"),
                     "placeholder": format!("EQ preset: {eq_preset}"),
                     "options": [
-                        select_option("Flat", "flat", "Neutralny dzwiek", eq_preset == "flat"),
-                        select_option("Bassboost", "bassboost", "Mocniejszy dol", eq_preset == "bassboost"),
-                        select_option("Vocal", "vocal", "Lepsza czytelnosc wokalu", eq_preset == "vocal"),
-                        select_option("Treble", "treble", "Jasniejsze wysokie tony", eq_preset == "treble"),
-                        select_option("Nightcore", "nightcore", "Szybciej + wyzszy pitch", eq_preset == "nightcore"),
+                        select_option("Flat", "flat", "Neutralny dźwięk", eq_preset == "flat"),
+                        select_option("Bassboost", "bassboost", "Mocniejszy dół", eq_preset == "bassboost"),
+                        select_option("Vocal", "vocal", "Lepsza czytelność wokalu", eq_preset == "vocal"),
+                        select_option("Treble", "treble", "Jaśniejsze wysokie tony", eq_preset == "treble"),
+                        select_option("Nightcore", "nightcore", "Szybciej + wyższy pitch", eq_preset == "nightcore"),
                     ],
                     "disabled": disabled,
                 }]},
@@ -250,9 +250,9 @@ pub fn panel_payload(snapshot: Option<&Snapshot>) -> Value {
                     "options": [
                         select_option("Vaporwave", "vaporwave", "Wolniej i cieplej", false),
                         select_option("8D", "8d", "Efekt obrotu stereo", false),
-                        select_option("Karaoke", "karaoke", "Probuj stlumic wokal", false),
-                        select_option("SoftLimiter", "softlimiter", "Lagodny low-pass", false),
-                        select_option("FX Off", "off", "Wylacz wszystkie FX", false),
+                        select_option("Karaoke", "karaoke", "Próbuj stłumić wokal", false),
+                        select_option("SoftLimiter", "softlimiter", "Łagodny low-pass", false),
+                        select_option("FX Off", "off", "Wyłącz wszystkie FX", false),
                     ],
                     "disabled": disabled,
                 }]},
@@ -301,10 +301,10 @@ fn same_voice(ix: &Ix<'_>, channel: Option<Id<ChannelMarker>>) -> bool {
 
 fn require_same_voice(ix: &Ix<'_>, channel: Option<Id<ChannelMarker>>) -> Option<&'static str> {
     if channel.is_some() && !same_voice(ix, channel) {
-        return Some("Musisz byc na tym samym kanale glosowym co bot.");
+        return Some("Musisz być na tym samym kanale głosowym co bot.");
     }
     if channel.is_none() && member_voice_channel(ix).is_none() {
-        return Some("Dolacz do kanalu glosowego, zeby sterowac ta sesja.");
+        return Some("Dołącz do kanału głosowego, żeby sterować tą sesją.");
     }
     None
 }
@@ -326,7 +326,7 @@ fn play_selection(ix: &Ix<'_>) -> Result<PlaySource> {
         };
         if !content_type.starts_with("audio/") && !audio_file_regex().is_match(&name) {
             bail!(
-                "\"{}\" nie wyglada jak plik audio.",
+                "\"{}\" nie wygląda jak plik audio.",
                 if a.filename.is_empty() {
                     "plik"
                 } else {
@@ -338,7 +338,7 @@ fn play_selection(ix: &Ix<'_>) -> Result<PlaySource> {
     let query = opts.string("query").unwrap_or_default().trim().to_owned();
     match (attachment, query.is_empty()) {
         (None, true) => bail!("Podaj `query` albo plik `audio`."),
-        (Some(_), false) => bail!("Wybierz jedno zrodlo: `query` albo `audio`."),
+        (Some(_), false) => bail!("Wybierz jedno źródło: `query` albo `audio`."),
         (Some(a), true) => Ok(PlaySource::Attachment {
             label: if a.filename.is_empty() {
                 a.url.clone()
@@ -367,17 +367,17 @@ fn voice_join_problem(
         .voice_channel_states(channel)
         .map_or(0, Iterator::count);
     if limit > 0 && members >= limit as usize {
-        return Some("Ten kanal glosowy jest pelny.");
+        return Some("Ten kanał głosowy jest pełny.");
     }
     if app.cache.member(guild_id, app.bot_id).is_none() {
-        return Some("Nie moge sprawdzic uprawnien bota.");
+        return Some("Nie mogę sprawdzić uprawnień bota.");
     }
     let perms = discord::bot_channel_permissions(app, channel)?;
     if !discord::has(perms, Permissions::CONNECT) {
-        return Some("Bot nie moze dolaczyc do tego kanalu glosowego (joinable=false).");
+        return Some("Bot nie może dołączyć do tego kanału głosowego (joinable=false).");
     }
     if !discord::has(perms, Permissions::SPEAK) {
-        return Some("Bot nie moze nadawac na tym kanale glosowym (speakable=false).");
+        return Some("Bot nie może nadawać na tym kanale głosowym (speakable=false).");
     }
     None
 }
@@ -385,32 +385,32 @@ fn voice_join_problem(
 fn play_error_text(message: &str, requested: &str) -> String {
     let re = |p: &str| regex::Regex::new(p).expect("static regex");
     if re(r"(?i)no node|not connected|lavalink").is_match(message) {
-        return "Blad odtwarzania: Lavalink nie jest polaczony albo nie obsluguje tego zrodla. Sprawdz node i pluginy.".to_owned();
+        return "Błąd odtwarzania: Lavalink nie jest połączony albo nie obsługuje tego źródła. Sprawdź node i pluginy.".to_owned();
     }
     if re(r"(?i)got 429|too many requests|rate.?limit").is_match(message) {
-        return "Blad odtwarzania: zrodlo chwilowo blokuje zapytania (429/rate limit). Sprobuj ponownie za chwile albo wybierz inne zrodlo.".to_owned();
+        return "Błąd odtwarzania: źródło chwilowo blokuje zapytania (429/rate limit). Spróbuj ponownie za chwilę albo wybierz inne źródło.".to_owned();
     }
     if re(r"(?i)operation was aborted").is_match(message) {
-        return "Blad odtwarzania: The operation was aborted. Sprobuj ponownie za chwile lub podaj bezposredni link YouTube.".to_owned();
+        return "Błąd odtwarzania: The operation was aborted. Spróbuj ponownie za chwilę lub podaj bezpośredni link YouTube.".to_owned();
     }
     let nothing = re(r"(?i)nothing found").is_match(message);
     if nothing && re(r"(?i)(?:youtu\.be|youtube\.com)").is_match(requested) {
-        return "Blad odtwarzania: YouTube odrzucil ten link (wymaga logowania/anti-bot). Sprobuj inny link, fraze wyszukiwania albo SoundCloud.".to_owned();
+        return "Błąd odtwarzania: YouTube odrzucił ten link (wymaga logowania/anti-bot). Spróbuj innego linku, frazę wyszukiwania albo SoundCloud.".to_owned();
     }
     if nothing && re(r"(?i)cdn\.discordapp\.com/attachments/").is_match(requested) {
-        return "Blad odtwarzania: ten link do zalacznika Discord jest niedostepny lub wygasl. Wyslij plik ponownie i uzyj opcji `audio`.".to_owned();
+        return "Błąd odtwarzania: ten link do załącznika Discord jest niedostępny lub wygasł. Wyślij plik ponownie i użyj opcji `audio`.".to_owned();
     }
     if re(r"(?i)failed to retrieve secret from spotify|spotifytokentracker").is_match(message) {
-        return "Blad odtwarzania: Spotify playlist/albums tymczasowo nie odpowiadaja po stronie API. Uzyj linku do pojedynczego utworu Spotify albo frazy wyszukiwania.".to_owned();
+        return "Błąd odtwarzania: Spotify playlist/albums tymczasowo nie odpowiadają po stronie API. Użyj linku do pojedynczego utworu Spotify albo frazy wyszukiwania.".to_owned();
     }
-    format!("Blad odtwarzania: {message}")
+    format!("Błąd odtwarzania: {message}")
 }
 
 async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
     let app = ix.app;
     let Some(voice) = member_voice_channel(ix) else {
         return ix
-            .reply_ephemeral("Najpierw dolacz do kanalu glosowego.")
+            .reply_ephemeral("Najpierw dołącz do kanału głosowego.")
             .await;
     };
     if let Some(problem) = voice_join_problem(app, guild_id, voice) {
@@ -420,7 +420,7 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
         !discord::has(p, Permissions::CONNECT) || !discord::has(p, Permissions::SPEAK)
     }) {
         return ix
-            .reply_ephemeral("Bot nie ma uprawnien Connect i Speak na tym kanale.")
+            .reply_ephemeral("Bot nie ma uprawnień Connect i Speak na tym kanale.")
             .await;
     }
 
@@ -447,7 +447,7 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
                     .expect("static regex")
                     .is_match(&query)
                 {
-                    ix.edit_content("Rozpoznaje Spotify przez Lavalink. Przy duzych playlistach moze to chwile potrwac.")
+                    ix.edit_content("Rozpoznaję Spotify przez Lavalink. Przy dużych playlistach może to chwilę potrwać.")
                         .await?;
                 }
                 stage = "resolve";
@@ -469,11 +469,11 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
                     let title = resolved.playlist_title.unwrap_or_else(|| "Playlist".to_owned());
                     return Ok(match batch.started_track.filter(|_| batch.started) {
                         Some(track) => format!(
-                            "Dodano playlistę \"{title}\" ({} utworow). Teraz gra: {}.",
+                            "Dodano playlistę \"{title}\" ({} utworów). Teraz gra: {}.",
                             batch.added,
                             format_track_line(&track, None)
                         ),
-                        None => format!("Dodano playlistę \"{title}\" ({} utworow) do kolejki.", batch.added),
+                        None => format!("Dodano playlistę \"{title}\" ({} utworów) do kolejki.", batch.added),
                     });
                 }
                 let result = app.music.enqueue(session, &resolved.tracks[0]).await?;
@@ -512,7 +512,7 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
                     }
                 }
                 if tracks.is_empty() {
-                    bail!("Nie udalo sie odtworzyc zadnego pliku audio.");
+                    bail!("Nie udało się odtworzyć żadnego pliku audio.");
                 }
                 stage = "enqueue";
                 let batch = app.music.enqueue_many(session, &tracks).await?;
@@ -521,8 +521,8 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
                     "Music command batch enqueued guild={guild_id} user={user} source=attachments added={} failed={failed}",
                     batch.added
                 );
-                let label = if batch.added == 1 { "plik audio" } else { "plikow audio" };
-                let skipped = if failed > 0 { format!(" Pominiete: {failed}.") } else { String::new() };
+                let label = if batch.added == 1 { "plik audio" } else { "plików audio" };
+                let skipped = if failed > 0 { format!(" Pominięte: {failed}.") } else { String::new() };
                 Ok(match batch.started_track.filter(|_| batch.started) {
                     Some(track) => format!(
                         "Dodano {} {label}. Teraz gra: {}.{skipped}",
@@ -563,7 +563,7 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
             );
             if !ix.deferred() && !ix.replied() {
                 return ix
-                    .reply_ephemeral(format!("Blad odtwarzania: {message}"))
+                    .reply_ephemeral(format!("Błąd odtwarzania: {message}"))
                     .await;
             }
             ix.edit_content(play_error_text(&message, &requested)).await
@@ -594,7 +594,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix.reply(json!({ "content": "Kolejka jest pusta." })).await;
             };
             let mut lines = vec![format!(
-                "Kanal glosowy: {}",
+                "Kanał głosowy: {}",
                 s.voice_channel_id
                     .map_or("<#null>".to_owned(), |c| format!("<#{c}>"))
             )];
@@ -602,7 +602,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 lines.push(format!("Teraz gra: {}", format_track_line(track, None)));
             }
             if !s.queue.is_empty() {
-                lines.push("Nastepne utwory:".to_owned());
+                lines.push("Następne utwory:".to_owned());
                 for (i, track) in s.queue.iter().take(10).enumerate() {
                     lines.push(format_track_line(track, Some(i + 1)));
                 }
@@ -625,12 +625,12 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
             if !same_voice(ix, voice) {
                 return ix
-                    .reply_ephemeral("Musisz byc na tym samym kanale glosowym co bot.")
+                    .reply_ephemeral("Musisz być na tym samym kanale głosowym co bot.")
                     .await;
             }
             match app.music.skip(guild_id).await? {
                 Some(track) => {
-                    ix.reply(json!({ "content": format!("Pominieto: {}.", format_track_line(&track, None)) }))
+                    ix.reply(json!({ "content": format!("Pominięto: {}.", format_track_line(&track, None)) }))
                         .await
                 }
                 None => ix.reply_ephemeral("Nic nie gra.").await,
@@ -642,11 +642,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
             if !same_voice(ix, voice) {
                 return ix
-                    .reply_ephemeral("Musisz byc na tym samym kanale glosowym co bot.")
+                    .reply_ephemeral("Musisz być na tym samym kanale głosowym co bot.")
                     .await;
             }
             app.music.stop(app, guild_id).await;
-            ix.reply(json!({ "content": "Zatrzymano muzyke i wyczyszczono kolejke." }))
+            ix.reply(json!({ "content": "Zatrzymano muzykę i wyczyszczono kolejkę." }))
                 .await
         }
         "pause" | "resume" => {
@@ -658,10 +658,10 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix.reply_ephemeral(error).await;
             }
             if pause && s.paused {
-                return ix.reply_ephemeral("Muzyka jest juz wstrzymana.").await;
+                return ix.reply_ephemeral("Muzyka jest już wstrzymana.").await;
             }
             if !pause && !s.paused {
-                return ix.reply_ephemeral("Muzyka juz gra.").await;
+                return ix.reply_ephemeral("Muzyka już gra.").await;
             }
             let next = app.music.set_paused(guild_id, Some(pause)).await?;
             match next.and_then(|n| n.current_track) {
@@ -689,7 +689,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             match app.music.adjust_volume(guild_id, delta).await? {
                 Some(next) => {
                     ix.reply(json!({ "content": format!(
-                        "Glosnosc ustawiona na **{}%** (zmiana {}{delta}).",
+                        "Głośność ustawiona na **{}%** (zmiana {}{delta}).",
                         next.volume,
                         if delta > 0 { "+" } else { "" }
                     ) }))
@@ -724,14 +724,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             match app.music.remove_from_queue(guild_id, position).await? {
                 Some(track) => {
                     ix.reply(json!({ "content": format!(
-                        "Usunieto z kolejki (pozycja {position}): {}.",
+                        "Usunięto z kolejki (pozycja {position}): {}.",
                         format_track_line(&track, None)
                     ) }))
                     .await
                 }
                 None => {
                     ix.reply_ephemeral(format!(
-                        "Nie udalo sie usunac pozycji {position} z kolejki."
+                        "Nie udało się usunąć pozycji {position} z kolejki."
                     ))
                     .await
                 }
@@ -745,11 +745,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix.reply_ephemeral(error).await;
             }
             if s.queue.is_empty() {
-                return ix.reply_ephemeral("Kolejka jest juz pusta.").await;
+                return ix.reply_ephemeral("Kolejka jest już pusta.").await;
             }
             let removed = app.music.clear_queue(guild_id).await.unwrap_or(0);
             ix.reply(json!({ "content": format!(
-                "Wyczyszczono kolejke. Usunieto **{removed}** oczekujacych utworow."
+                "Wyczyszczono kolejkę. Usunięto **{removed}** oczekujących utworów."
             ) }))
             .await
         }
@@ -766,7 +766,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     None => ix.edit_content("Brak aktywnej sesji muzyki.").await,
                     Some(r) => {
                         ix.edit_content(format!(
-                            "Reconnect zakonczony. Kanal: <#{}>. Node: **{}**.",
+                            "Reconnect zakończony. Kanał: <#{}>. Node: **{}**.",
                             r.voice_channel_id,
                             if r.node_connected {
                                 "online"
@@ -787,11 +787,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 );
                 if !ix.deferred() && !ix.replied() {
                     return ix
-                        .reply_ephemeral(format!("Reconnect nie powiodl sie: {message}"))
+                        .reply_ephemeral(format!("Reconnect nie powiódł się: {message}"))
                         .await;
                 }
                 return ix
-                    .edit_content(format!("Reconnect nie powiodl sie: {message}"))
+                    .edit_content(format!("Reconnect nie powiódł się: {message}"))
                     .await;
             }
             Ok(())
@@ -831,11 +831,11 @@ pub async fn handle_component(ix: &Ix<'_>) -> Result<bool> {
         let message = discord::err_text(&error);
         tracing::error!("Music button error guild={guild_id} action={action}: {message}");
         if !ix.replied() && !ix.deferred() {
-            ix.reply_ephemeral(format!("Blad panelu muzyki: {message}"))
+            ix.reply_ephemeral(format!("Błąd panelu muzyki: {message}"))
                 .await?;
         } else {
             let _ = ix
-                .follow_up(json!({ "content": format!("Blad panelu muzyki: {message}"), "flags": FLAG_EPHEMERAL }))
+                .follow_up(json!({ "content": format!("Błąd panelu muzyki: {message}"), "flags": FLAG_EPHEMERAL }))
                 .await;
         }
     }
@@ -854,7 +854,7 @@ async fn handle_panel_action(
     let restore = is_button && action == "restorequeue";
     if restore && member_voice.is_none() {
         return ix
-            .reply_ephemeral("Dolacz do kanalu glosowego, zeby przywrocic kolejke.")
+            .reply_ephemeral("Dołącz do kanału głosowego, żeby przywrócić kolejkę.")
             .await;
     }
     if snapshot.is_none() && !restore {
@@ -864,15 +864,15 @@ async fn handle_panel_action(
         && !same_voice(ix, s.voice_channel_id)
     {
         return ix
-            .reply_ephemeral("Musisz byc na tym samym kanale glosowym co bot.")
+            .reply_ephemeral("Musisz być na tym samym kanale głosowym co bot.")
             .await;
     }
     if is_button {
         let text = match action {
             "queue" => Some(queue_preview(snapshot.as_ref())),
             "lyrics" => Some(lyrics_content(snapshot.as_ref())),
-            "eq" => Some("Wybierz preset z menu EQ ponizej.".to_owned()),
-            "fx" => Some("Wybierz efekt z menu FX ponizej.".to_owned()),
+            "eq" => Some("Wybierz preset z menu EQ poniżej.".to_owned()),
+            "fx" => Some("Wybierz efekt z menu FX poniżej.".to_owned()),
             _ => None,
         };
         if let Some(text) = text {
@@ -926,12 +926,12 @@ async fn handle_panel_action(
         }
         (_, "savequeue") => {
             let saved = app.music.save_queue_state(guild_id).await?;
-            follow_up = Some(format!("Zapisano kolejke ({saved} utworow)."));
+            follow_up = Some(format!("Zapisano kolejkę ({saved} utworów)."));
         }
         (_, "restorequeue") => {
             let voice = member_voice.ok_or_else(|| anyhow!("Brak guild albo voice channel."))?;
             let restored = app.music.restore_queue_state(app, guild_id, voice).await?;
-            follow_up = Some(format!("Przywrocono kolejke: {restored} utworow."));
+            follow_up = Some(format!("Przywrócono kolejkę: {restored} utworów."));
         }
         _ => {}
     }
@@ -974,7 +974,7 @@ mod tests {
     #[test]
     fn error_mapping() {
         assert!(
-            play_error_text("Nothing found", "https://youtu.be/x").contains("YouTube odrzucil")
+            play_error_text("Nothing found", "https://youtu.be/x").contains("YouTube odrzucił")
         );
         assert!(play_error_text("boom", "x").ends_with("boom"));
     }

@@ -153,7 +153,7 @@ fn format_line_breaks(input: &str) -> String {
 fn normalize_required_content(value: &str) -> Result<String> {
     let raw = value.trim();
     if raw.is_empty() {
-        bail!("Tresc announcement nie moze byc pusta.");
+        bail!("Treść announcement nie może być pusta.");
     }
     Ok(format_line_breaks(raw))
 }
@@ -172,7 +172,7 @@ fn list_embed(items: &[Value]) -> Value {
         "timestamp": now_iso(),
     });
     if items.is_empty() {
-        embed["description"] = json!("Brak ogloszen.");
+        embed["description"] = json!("Brak ogłoszeń.");
         return embed;
     }
     let fields: Vec<Value> = items
@@ -182,7 +182,7 @@ fn list_embed(items: &[Value]) -> Value {
             let status = item["status"].as_str().unwrap_or("undefined");
             let ids = item["messageIds"].as_array().map_or(0, Vec::len);
             let mut lines = vec![
-                format!("kanal: <#{}>", s(item, "channelId").unwrap_or("undefined")),
+                format!("kanał: <#{}>", s(item, "channelId").unwrap_or("undefined")),
                 format!("czas: <t:{}:F>", run_at_ms(item).div_euclid(1000)),
             ];
             if status != "sent"
@@ -251,7 +251,7 @@ fn profile_list_embed(profiles: &Map<String, Value>) -> Value {
         .map(|name| {
             let profile = &profiles[&name];
             let mut lines = vec![format!(
-                "kanal: <#{}>",
+                "kanał: <#{}>",
                 s(profile, "channelId").unwrap_or("undefined")
             )];
             for (key, label) in [
@@ -388,7 +388,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let avatar = normalize_optional_text(opts.string("avatar_url"));
             if current.profiles.contains_key(&name) {
                 return ix
-                    .reply_ephemeral("Profil o tej nazwie juz istnieje.")
+                    .reply_ephemeral("Profil o tej nazwie już istnieje.")
                     .await;
             }
             let now = now_iso();
@@ -449,7 +449,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 }
             }
             if changed.is_empty() {
-                return ix.reply_ephemeral("Nie podano zadnej zmiany.").await;
+                return ix.reply_ephemeral("Nie podano żadnej zmiany.").await;
             }
             profile["updatedAt"] = json!(now_iso());
             save_profiles(&current.profiles);
@@ -475,7 +475,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .await;
             }
             save_profiles(&current.profiles);
-            ix.reply_ephemeral(format!("Usunieto profil `{name}`."))
+            ix.reply_ephemeral(format!("Usunięto profil `{name}`."))
                 .await
         }
         "create" | "now" => {
@@ -504,7 +504,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 });
             let Some(channel) = opts.channel("channel").map(|c| c.0).or(profile_channel) else {
                 return ix
-                    .reply_ephemeral("Podaj `channel` albo uzyj profilu z ustawionym kanalem.")
+                    .reply_ephemeral("Podaj `channel` albo użyj profilu z ustawionym kanałem.")
                     .await;
             };
             let run_at = if mode == "create" {
@@ -578,7 +578,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .save_announcements(&guild, json!({ "items": current.items }));
                 return ix
                     .reply_ephemeral(format!(
-                        "Dodano ogloszenie `{code}` na <t:{}:F> (UTC) w <#{channel}>{from_profile}.",
+                        "Dodano ogłoszenie `{code}` na <t:{}:F> (UTC) w <#{channel}>{from_profile}.",
                         chrono::DateTime::parse_from_rfc3339(&run_at).map_or(0, |d| d.timestamp())
                     ))
                     .await;
@@ -593,7 +593,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     app.state
                         .save_announcements(&guild, json!({ "items": current.items }));
                     ix.edit_content(format!(
-                        "Wyslano ogloszenie `{code}` teraz w <#{channel}> (parts: {parts}, messageId: `{message_id}`){from_profile}."
+                        "Wysłano ogłoszenie `{code}` teraz w <#{channel}> (parts: {parts}, messageId: `{message_id}`){from_profile}."
                     ))
                     .await
                 }
@@ -608,7 +608,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         .save_announcements(&guild, json!({ "items": current.items }));
                     tracing::error!("Announcement now error ({guild}/{id}): {message}");
                     ix.edit_content(format!(
-                        "Nie udalo sie wyslac announcement teraz: {message}"
+                        "Nie udało się wysłać announcement teraz: {message}"
                     ))
                     .await
                 }
@@ -625,7 +625,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
             let Some(index) = current.items.iter().position(|i| matches_reference(i, &id)) else {
                 return ix
-                    .reply_ephemeral("Nie znaleziono ogloszenia o tym ID.")
+                    .reply_ephemeral("Nie znaleziono ogłoszenia o tym ID.")
                     .await;
             };
             let next_datetime = opts.string("datetime").filter(|d| !d.is_empty());
@@ -682,7 +682,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 changed.push("button_url");
             }
             if changed.is_empty() {
-                return ix.reply_ephemeral("Nie podano zadnej zmiany.").await;
+                return ix.reply_ephemeral("Nie podano żadnej zmiany.").await;
             }
             if item["sendMode"].as_str() == Some("components")
                 && (item.get("buttonLabel").is_none_or(is_falsy)
@@ -718,7 +718,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                             item["deliveryChannelId"] = json!(delivery);
                         }
                         note = match edited.mode {
-                            "resent" => Some("live update: ponowna publikacja na nowy kanal"),
+                            "resent" => Some("live update: ponowna publikacja na nowy kanał"),
                             "edited_in_place" => Some("live update: edycja w miejscu"),
                             _ => None,
                         };
@@ -737,7 +737,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 item["status"] = json!("scheduled");
             }
             let base = format!(
-                "Zmieniono ogloszenie `{}`: {}.",
+                "Zmieniono ogłoszenie `{}`: {}.",
                 reference(item),
                 changed.join(", ")
             );
@@ -745,7 +745,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .save_announcements(&guild, json!({ "items": current.items }));
             let reply = match (live_error, note) {
                 (Some(error), _) => format!(
-                    "{base} Zapisano zmiany w stanie, ale aktualizacja juz wyslanej wiadomosci nie powiodla sie: {error}"
+                    "{base} Zapisano zmiany w stanie, ale aktualizacja już wysłanej wiadomości nie powiodła się: {error}"
                 ),
                 (None, Some(note)) => format!("{base} {note}."),
                 (None, None) => base,
@@ -759,7 +759,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
             let Some(index) = current.items.iter().position(|i| matches_reference(i, &id)) else {
                 return ix
-                    .reply_ephemeral("Nie znaleziono ogloszenia o tym ID.")
+                    .reply_ephemeral("Nie znaleziono ogłoszenia o tym ID.")
                     .await;
             };
             let item = current.items.remove(index);
@@ -780,9 +780,9 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let r = reference(&item);
             ix.reply_ephemeral(match warning {
                 Some(w) => format!(
-                    "Usunieto ogloszenie `{r}` ze stanu, ale nie udalo sie skasowac opublikowanej wiadomosci: {w}"
+                    "Usunięto ogłoszenie `{r}` ze stanu, ale nie udało się skasować opublikowanej wiadomości: {w}"
                 ),
-                None => format!("Usunieto ogloszenie `{r}`."),
+                None => format!("Usunięto ogłoszenie `{r}`."),
             })
             .await
         }
