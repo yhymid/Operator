@@ -909,6 +909,12 @@
         "name": "url",
         "description": "Adres URL video",
         "required": true
+      },
+      {
+        "type": 5,
+        "name": "audio",
+        "description": "Tylko dźwięk (MP3)",
+        "required": false
       }
     ]
   }

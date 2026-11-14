@@ -382,6 +382,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .await;
     }
     let raw = ix.opts().string("url").unwrap_or_default();
+    let audio = ix.opts().boolean("audio") == Some(true);
     let url = match normalize_url(&raw) {
         Ok(url) => url,
         Err(message) => return ix.reply_ephemeral(message).await,
@@ -404,7 +405,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     // Dropping the future on timeout kills yt-dlp/ffmpeg (`kill_on_drop`).
     let result = tokio::time::timeout(INTERACTION_BUDGET, async {
         let _slot = job_slot().acquire().await?;
-        download_and_send(ix, &settings, &url, &temp_dir).await
+        download_and_send(ix, &settings, &url, &temp_dir, audio).await
     })
     .await
     .unwrap_or_else(|_| {
@@ -427,23 +428,55 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     Ok(())
 }
 
-async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Path) -> Result<()> {
-    let mut args: Vec<String> = [
-        "--no-playlist",
-        "--no-progress",
-        "-f",
-        "bestvideo+bestaudio/best",
-        "--format-sort",
-        settings.format_sort(),
-    ]
-    .map(str::to_owned)
-    .to_vec();
+fn duration_filter(max_secs: u64) -> String {
+    format!("duration <=? {max_secs}")
+}
+
+/// yt-dlp arguments selecting the media: best video+audio, or with `audio` only the sound,
+/// extracted to MP3 (plays inline in Discord on every client).
+fn format_args(settings: &Settings, audio: bool) -> Vec<String> {
+    let args: &[&str] = if audio {
+        &[
+            "-f",
+            "bestaudio/best",
+            "-x",
+            "--audio-format",
+            "mp3",
+            "--audio-quality",
+            "192K",
+        ]
+    } else {
+        &[
+            "-f",
+            "bestvideo+bestaudio/best",
+            "--format-sort",
+            settings.format_sort(),
+        ]
+    };
+    let mut out: Vec<String> = args.iter().map(|a| (*a).to_owned()).collect();
+    if !audio && settings.codec != VideoCodec::Source {
+        out.extend(["--merge-output-format", "mp4"].map(str::to_owned));
+    }
+    out
+}
+
+async fn download_and_send(
+    ix: &Ix<'_>,
+    settings: &Settings,
+    url: &str,
+    dir: &Path,
+    audio: bool,
+) -> Result<()> {
+    let mut args: Vec<String> = ["--no-playlist", "--no-progress"]
+        .map(str::to_owned)
+        .to_vec();
+    args.extend(format_args(settings, audio));
     args.extend(["--js-runtimes".to_owned(), settings.js_runtime.clone()]);
     if settings.max_duration_secs > 0 {
-        // `!duration`: live streams and sites without a duration are not refused here.
+        // `<=?` also passes media without a known duration (live streams, direct files).
         args.extend([
             "--match-filter".to_owned(),
-            format!("!duration | duration <= {}", settings.max_duration_secs),
+            duration_filter(settings.max_duration_secs),
         ]);
     }
     if settings.max_download_bytes > 0 {
@@ -452,9 +485,6 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
             settings.max_download_bytes.to_string(),
         ]);
     }
-    if settings.codec != VideoCodec::Source {
-        args.extend(["--merge-output-format", "mp4"].map(str::to_owned));
-    }
     if is_youtube(url) && settings.cookies.exists() {
         args.extend([
             "--cookies".to_owned(),
@@ -462,7 +492,12 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
         ]);
     }
     args.push("-o".to_owned());
-    args.push(dir.join("video.%(ext)s").to_string_lossy().into_owned());
+    let stem = if audio { "audio" } else { "video" };
+    args.push(
+        dir.join(format!("{stem}.%(ext)s"))
+            .to_string_lossy()
+            .into_owned(),
+    );
     args.push(url.to_owned());
     let stdout = run(&settings.ytdlp, &args, Some(dir), DOWNLOAD_TIMEOUT)
         .await
@@ -483,7 +518,11 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
         }
         bail!("yt-dlp nie zwrócił pobranego pliku.");
     };
-    let file = ensure_compatible(settings, &file).await?;
+    let file = if audio {
+        file
+    } else {
+        ensure_compatible(settings, &file).await?
+    };
     let size = tokio::fs::metadata(&file).await?.len();
     if size > settings.max_upload_bytes {
         let link = publish(settings, &file).await?;
@@ -553,7 +592,10 @@ fn definition() -> serde_json::Value {
         "name": "ytdlp",
         "description": "Pobiera video z podanego adresu i wysyła je na kanał",
         "dm_permission": false,
-        "options": [{ "type": 3, "name": "url", "description": "Adres URL video", "required": true }]
+        "options": [
+            { "type": 3, "name": "url", "description": "Adres URL video", "required": true },
+            { "type": 5, "name": "audio", "description": "Tylko dźwięk (MP3)", "required": false }
+        ]
     })
 }
 
@@ -597,6 +639,24 @@ mod tests {
             effective_codec(VideoCodec::H264, &hevc, 1_000, limit),
             VideoCodec::H264
         );
+    }
+
+    /// Checked against yt-dlp: `yt_dlp.utils.match_filter_func("duration <=? 1800")` skips a
+    /// 2 h video and passes 10 min and unknown durations; the earlier `!duration | ...` form is
+    /// rejected by yt-dlp ("Invalid filter part") and failed every download.
+    #[test]
+    fn duration_filter_uses_ytdlp_syntax() {
+        assert_eq!(duration_filter(1800), "duration <=? 1800");
+    }
+
+    #[test]
+    fn audio_and_video_format_args() {
+        let settings = Settings::from_env();
+        let audio = format_args(&settings, true).join(" ");
+        assert!(audio.contains("-x --audio-format mp3"));
+        assert!(!audio.contains("--merge-output-format"));
+        let video = format_args(&settings, false).join(" ");
+        assert!(video.starts_with("-f bestvideo+bestaudio/best --format-sort"));
     }
 
     #[test]
