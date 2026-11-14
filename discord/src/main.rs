@@ -477,6 +477,7 @@ async fn on_ready(
     }
 
     app.state.migrate_legacy_server_cache();
+    commands::ytdlp::cleanup_expired_media().await;
     mark_all_guilds(&app, true, "startup", !app.startup_verbose);
     commands::register_on_startup(&app).await;
     if let Err(error) = app.autoclean.start(&app) {

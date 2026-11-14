@@ -48,3 +48,10 @@ na sciezke do binarki. Poziom logow: `RUST_LOG` (np. `RUST_LOG=debug`).
 - Reconnect muzyki po restarcie Lavalinka przywraca utwor, pozycje, glosnosc i filtry.
 - `commands sync` z CLI uzywa samego REST (bez logowania do gateway).
 - Nieuzywany w JS `enqueueSpotifyPlaylistProgressive` nie zostal przeniesiony.
+
+## /ytdlp (z wersji JS na VPS)
+
+- Format sort bez zmian co do idei, ale z preferencja SDR i H.264 przy remisie oraz `--merge-output-format mp4`.
+- Konwersja do H.264/AAC (albo AV1) przed wysylka; w JS HEVC wyswietlal sie w Discordzie jako zamrozony obraz.
+- Gdy Discord odrzuci zalacznik jako za duzy, bot publikuje player zamiast zwracac blad.
+- `YTDLP_PATH` jest konfigurowalny (w JS na sztywno `/usr/local/bin/yt-dlp`, to nadal domyslna wartosc).

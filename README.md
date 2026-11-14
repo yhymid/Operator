@@ -12,6 +12,8 @@ zostala w historii i na `main`.
 - **Music** - Lavalink v4: kolejka, panel z przyciskami, loop, autoplay, EQ/FX, zapis kolejki
 - **Full Logs** - pelne logi serwera na kanal + pliki JSONL z retencja, eksport, purge
 - **Announcements** - planowane ogloszenia przez webhooki, profile, edycja wyslanych
+- **/ytdlp** - pobiera video (yt-dlp) i wysyla na kanal w H.264, wiec odtwarza sie w Discordzie;
+  za duze pliki ida na strone jako player (link wazny 6 h)
 - **Health / Debug** - diagnostyka muzyki, uprawnien i logow; narzedzia ownera (`/cache`, `/dm`)
 
 ## Struktura
@@ -32,7 +34,8 @@ docs/                      deploy na VPS, roznice wzgledem JS
 
 ## Szybki start
 
-Wymagania: Rust (stable, >= 1.88), opcjonalnie Lavalink v4 (Java 17+) dla muzyki.
+Wymagania: Rust (stable, >= 1.88), opcjonalnie Lavalink v4 (Java 17+) dla muzyki,
+`yt-dlp` + `ffmpeg`/`ffprobe` (z `libx264`) dla `/ytdlp`.
 
 ```bash
 cargo build --release -p operator-discord
@@ -65,6 +68,19 @@ Logi: `RUST_LOG=debug` dla szczegolow. Pod systemd znaczniki czasu dodaje journa
 Przyklad konfiguracji: `discord/deploy/lavalink/application.yml.example`. Polaczenie ustawiasz
 w `.env` (`LAVALINK_URL` albo `LAVALINK_HOST`/`PORT`/`PASSWORD`/`SECURE`/`NODE_ID`).
 Bez Lavalinka bot dziala, a muzyka laczy sie sama, gdy node wstanie (ponawianie co 10 s).
+
+## /ytdlp
+
+1. yt-dlp pobiera najlepszy obraz i dzwiek (najwyzsza rozdzielczosc i FPS; przy remisie SDR i H.264).
+2. `ffprobe` sprawdza plik: HEVC/H.265, VP9, AV1 lub 10-bit/HDR jest kodowany do H.264 High
+   `yuv420p` CRF 18 (Discord pokazuje zamrozony obraz dla HEVC), Opus -> AAC; reszta jest kopiowana.
+   Zawsze `+faststart`.
+3. Plik do `YTDLP_MAX_UPLOAD_BYTES` (domyslnie 25 MiB) idzie jako zalacznik. Wiekszy - albo
+   odrzucony przez Discorda jako za duzy (serwer bez boostow ma nizszy limit) - trafia do
+   `YTDLP_MEDIA_ROOT` jako player pod `YTDLP_MEDIA_BASE_URL`, kasowany po 6 godzinach.
+
+Zmienne: `YTDLP_PATH`, `YTDLP_COOKIES_PATH`, `YTDLP_VIDEO_CODEC=h264|av1|source`, `YTDLP_VIDEO_CRF`,
+`FFMPEG_PATH`, `FFPROBE_PATH` - opisane w `discord/deploy/.env.example`.
 
 ## Rozwoj
 

@@ -273,6 +273,21 @@ impl<'a> Ix<'a> {
         Ok(())
     }
 
+    /// Edit the reply with a single (possibly large) attachment without JSON-encoding the bytes.
+    pub async fn edit_with_file(&self, content: &str, name: &str, bytes: Vec<u8>) -> Result<()> {
+        let body = serde_json::to_vec(&json!({ "content": content }))?;
+        let files = [HttpAttachment::from_bytes(name.to_owned(), bytes, 0)];
+        self.app
+            .http
+            .interaction(self.app.application_id)
+            .update_response(&self.interaction.token)
+            .payload_json(&body)
+            .attachments(&files)
+            .await
+            .context("edit interaction reply")?;
+        Ok(())
+    }
+
     pub async fn edit_content(&self, content: impl Into<String>) -> Result<()> {
         self.edit(json!({ "content": content.into() })).await
     }

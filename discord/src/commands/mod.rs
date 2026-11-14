@@ -12,6 +12,7 @@ pub mod logs;
 pub mod music;
 pub mod settings;
 pub mod verify;
+pub mod ytdlp;
 
 use std::sync::OnceLock;
 
@@ -269,6 +270,7 @@ async fn dispatch_command(ix: &Ix<'_>) -> Result<()> {
         "health" => diagnostics::execute_health(ix).await,
         "debug" => diagnostics::execute_debug(ix).await,
         "dm" => dm::execute(ix).await,
+        "ytdlp" => ytdlp::execute(ix).await,
         _ => Ok(()),
     }
 }
@@ -289,7 +291,7 @@ mod tests {
             names,
             [
                 "help", "settings", "clean", "cache", "music", "verify", "automod", "announce",
-                "logs", "health", "debug", "dm"
+                "logs", "health", "debug", "dm", "ytdlp"
             ]
         );
     }
