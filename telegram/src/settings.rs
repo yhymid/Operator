@@ -13,13 +13,14 @@ pub fn js_number(raw: Option<&str>) -> f64 {
     text.parse::<f64>().unwrap_or(f64::NAN)
 }
 
-/// `Number(env) || fallback`
+/// `Number(env) || fallback`, except that negative and infinite values also fall back: every
+/// caller is a size or a duration, and `-1` used to become a zero timeout.
 fn number_or(name: &str, fallback: f64) -> f64 {
     let value = js_number(std::env::var(name).ok().as_deref());
-    if value.is_nan() || value == 0.0 {
-        fallback
-    } else {
+    if value.is_finite() && value > 0.0 {
         value
+    } else {
+        fallback
     }
 }
 

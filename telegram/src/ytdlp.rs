@@ -354,7 +354,14 @@ async fn exec(program: &str, args: &[String], timeout: Duration) -> Result<Strin
             if let Some(pid) = child.id() {
                 let _ = kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
             }
-            let _ = child.wait().await;
+            // A process ignoring SIGTERM must not hang the job forever.
+            if tokio::time::timeout(Duration::from_secs(5), child.wait())
+                .await
+                .is_err()
+            {
+                let _ = child.start_kill();
+                let _ = child.wait().await;
+            }
             None
         }
     };
