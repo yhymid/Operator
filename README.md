@@ -11,21 +11,32 @@ i wysylka w kodeku, ktory odtwarza sie w Telegramie i Discordzie. To jest glowna
 - `/ytdlp_admin pause | resume | clear | cancel <pozycja>` - tylko `ADMIN_IDS`
 - linki YouTube Shorts / Instagram Reels / TikTok wyslane zwykla wiadomoscia sa pobierane automatycznie
 
+Ograniczenia: jeden uzytkownik moze miec `YTDLP_QUEUE_MAX_PER_USER` zadan (domyslnie 3), adresy
+lokalne/prywatne sa odrzucane, a `ALLOWED_CHAT_IDS` (puste = wszystkie) zaweza czaty, w ktorych
+bot odpowiada (administratorzy z `ADMIN_IDS` sa obslugiwani wszedzie). Admini tylko po ID -
+`ADMIN_USERNAMES` nie jest juz obslugiwane.
+
 ## Struktura
 
 ```
 Cargo.toml              workspace (wspolne wersje zaleznosci, profil release: LTO + strip)
-common/                 wspolny crate: .env, czas, sygnaly, atomowy zapis JSON
+common/                 wspolny crate: .env, czas, sygnaly, atomowy zapis JSON,
+                        net (blokada adresow lokalnych), media (ffprobe/ffmpeg)
 telegram/
   src/main.rs           start, long polling, zamykanie
   src/api.rs            klient Bot API (JSON + strumieniowy upload multipart)
   src/limiter.rs        limiter per czat (priorytety, retry_after, scalanie edycji)
   src/queue.rs          kolejka zadan (pauza/wznow/anuluj)
-  src/ytdlp.rs          /ytdlp: yt-dlp, konwersja ffmpeg, wysylka, publikacja na stronie
+  src/ytdlp.rs          /ytdlp: wspolne helpery; ytdlp/{format,download,website,replies,
+                        queue_view,handlers,jobs}.rs
   src/bot.rs            routing aktualizacji i komend
   deploy/               .env.example, operator-telegram.service
 docs/                   roznice wzgledem wersji JS
+scripts/                deploy.sh (instalacja release'u z rollbackiem), sync-common.sh
 ```
+
+`common/` jest tez na galezi `discord` i musi byc identyczny: zmieniaj go osobnym commitem,
+potem `scripts/sync-common.sh` przenosi go na druga galaz (CI ostrzega, gdy sie rozjada).
 
 ## Wymagania
 
@@ -47,6 +58,10 @@ Zmienne sa te same co w wersji JS - stary `.env` dziala bez zmian.
 
 ## Deploy (systemd)
 
+Z release'u: `git tag telegram-v1.0.0 telegram && git push github telegram-v1.0.0` buduje
+binarke w GitHub Actions, a na serwerze `scripts/deploy.sh telegram telegram-v1.0.0` ja instaluje
+(SHA256, czeka na pusta kolejke, restart, rollback gdy unit nie wstanie). Recznie:
+
 ```bash
 cp target/release/operator-telegram /home/ubuntu/yhymfiles/operator-tg/
 sudo cp telegram/deploy/operator-telegram.service /etc/systemd/system/operator-tg.service
@@ -67,7 +82,8 @@ zawiera `--api-id`/`--api-hash` - trzymaj go poza repozytorium.
    AAC/MP3 (np. Opus) -> AAC 192 kb/s. Pasujace strumienie sa tylko kopiowane. Zawsze `+faststart`,
    wiec film startuje od razu.
 3. **Wysylka** - plik do `YTDLP_MAX_UPLOAD_BYTES` idzie do Telegrama; wiekszy trafia na strone
-   (`YTDLP_WEBSITE_ROOT`, `YTDLP_PUBLIC_BASE_URL`) z odtwarzaczem i przyciskiem usuwania.
+   (`YTDLP_WEBSITE_ROOT`, `YTDLP_PUBLIC_BASE_URL`) z odtwarzaczem i przyciskiem usuwania;
+   strona jest kasowana po `YTDLP_WEBSITE_TTL_HOURS` (24 h).
    `TELEGRAM_DIRECT_URL_FIRST` wysyla Telegramowi bezposredni URL tylko, gdy serwis ma gotowy
    strumien w docelowym kodeku.
 
@@ -76,7 +92,7 @@ zawiera `--api-id`/`--api-hash` - trzymaj go poza repozytorium.
 | Wartosc | Discord | Telegram | Rozmiar | Uwagi |
 | --- | --- | --- | --- | --- |
 | `h264` (domyslnie) | tak | tak | bazowy | najszersza zgodnosc |
-| `av1` | niepewne | zalezy od klienta | zwykle wyraznie mniejszy | dluzsze kodowanie |
+| `av1` | tak (bot Discord uzywa go domyslnie) | zalezy od klienta | zwykle wyraznie mniejszy | dluzsze kodowanie (SVT-AV1 preset 6) |
 | `source` | HEVC sie zacina | zalezy | bez zmian | bez konwersji, jak w JS |
 
 `YTDLP_VIDEO_CRF` zmienia jakosc konwersji (mniej = lepiej i wiekszy plik). Konwersja nie
