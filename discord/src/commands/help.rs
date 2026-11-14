@@ -14,13 +14,11 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
     let lines: &[&str] = match page.to_lowercase().as_str() {
         "music" => &[
             "### Muzyka",
-            "`/music mode:play query:<fraza lub link>` albo `audio:<plik z Discorda>`",
-            "`/music mode:queue|nowplaying|skip|stop`",
-            "`/music mode:pause|resume`",
-            "`/music mode:volume value:<+10|-10|80>`",
-            "`/music mode:remove position:<numer>`",
-            "`/music mode:move position:<skąd> to:<dokąd>`, `/music mode:seek time:<1:30>`",
-            "`/music mode:clear|reconnect`",
+            "`/play query:<fraza lub link>` albo `audio:<plik z Discorda>`",
+            "`/pause`, `/resume`, `/skip`, `/stop`, `/queue`, `/nowplaying`",
+            "`/volume value:<+10|-10>`, `/seek time:<1:30>`",
+            "`/remove position:<numer>`, `/move from:<skąd> to:<dokąd>`, `/clear`",
+            "`/loop [mode:wyłączone|utwór|kolejka]`, `/reconnect`",
             "Panel z przyciskami: loop, autoplay, shuffle, EQ/FX.",
             "`/ytdlp url:<link>` - pobiera video i wysyła je na kanał (`audio:true` - sam dźwięk MP3)",
         ],
@@ -54,7 +52,7 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
         _ => &[
             "### Start",
             "`/help section:<sekcja>` - otwiera od razu wybrany obszar",
-            "`/music mode:play ...` - odtwarzanie, kolejka i recovery",
+            "`/play ...` - odtwarzanie, kolejka i recovery",
             "`/ytdlp url:<link>` - pobieranie video na kanał",
             "`/automod ...`, `/verify ...`, `/logs ...`, `/dm ...` - moderacja, verify i full logs",
             "`/settings ...`, `/health`, `/debug ...` - konfiguracja i diagnostyka",

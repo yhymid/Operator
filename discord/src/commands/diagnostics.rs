@@ -170,7 +170,7 @@ async fn inspect_music(app: &App, guild_id: Option<Id<GuildMarker>>) -> MusicSna
     if !d.initialized || !d.usable || connected_nodes == 0 {
         issues.push(issue(
             Severity::Critical,
-            "Lavalink jest offline. /music play nie zadziała, dopóki node nie wstanie.",
+            "Lavalink jest offline. /play nie zadziała, dopóki node nie wstanie.",
         ));
     }
     if !d.has_explicit_password {

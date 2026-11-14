@@ -261,7 +261,6 @@ async fn dispatch_command(ix: &Ix<'_>) -> Result<()> {
         "clean" => clean::execute(ix).await,
         "help" => help::execute(ix).await,
         "cache" => cache::execute(ix).await,
-        "music" => music::execute(ix).await,
         "verify" => verify::execute(ix).await,
         "automod" => automod::execute(ix).await,
         "settings" => settings::execute(ix).await,
@@ -271,6 +270,7 @@ async fn dispatch_command(ix: &Ix<'_>) -> Result<()> {
         "debug" => diagnostics::execute_debug(ix).await,
         "dm" => dm::execute(ix).await,
         "ytdlp" => ytdlp::execute(ix).await,
+        music if music::COMMANDS.contains(&music) => music::execute(ix, music).await,
         _ => Ok(()),
     }
 }
@@ -278,6 +278,27 @@ async fn dispatch_command(ix: &Ix<'_>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every music command in the manifest is routed to `music::execute`, and nothing else is.
+    #[test]
+    fn music_commands_are_dispatched() {
+        let names: Vec<&str> = payload()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["name"].as_str().unwrap())
+            .collect();
+        for command in music::COMMANDS {
+            assert!(
+                names.contains(&command),
+                "{command} missing from commands.json"
+            );
+        }
+        assert!(
+            !names.contains(&"music"),
+            "/music was replaced by standalone commands"
+        );
+    }
 
     #[test]
     fn manifest_matches_js() {
@@ -290,8 +311,32 @@ mod tests {
         assert_eq!(
             names,
             [
-                "help", "settings", "clean", "cache", "music", "verify", "automod", "announce",
-                "logs", "health", "debug", "dm", "ytdlp"
+                "help",
+                "settings",
+                "clean",
+                "cache",
+                "play",
+                "pause",
+                "resume",
+                "skip",
+                "stop",
+                "queue",
+                "nowplaying",
+                "volume",
+                "remove",
+                "move",
+                "seek",
+                "clear",
+                "loop",
+                "reconnect",
+                "verify",
+                "automod",
+                "announce",
+                "logs",
+                "health",
+                "debug",
+                "dm",
+                "ytdlp"
             ]
         );
     }

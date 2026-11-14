@@ -24,7 +24,7 @@ common/                    wspolny crate: .env, logowanie, atomowy zapis JSON, c
                            net (blokada adresow lokalnych), media (ffprobe/ffmpeg, feature "media")
 discord/
   src/main.rs              start, petla gateway, CLI (run / commands sync / doctor)
-  src/commands/            komendy slash (/help, /music, /logs, ...)
+  src/commands/            komendy slash (/help, /play, /skip, /logs, ...)
   src/modules/             autoclean, automod, verification, announcements,
                            fulllogs/events/* (handler na zdarzenie), music/* (voice, search, controls, ...)
   src/lavalink.rs          klient Lavalink v4 (REST + WebSocket)

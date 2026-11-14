@@ -1,4 +1,4 @@
-//! `/music` and the music panel components (port of `src/cmds/music.js`).
+//! Music slash commands (`/play`, `/skip`, `/loop`, ...) and the music panel components (port of `src/cmds/music.js`).
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
@@ -368,7 +368,7 @@ fn play_selection(ix: &Ix<'_>) -> Result<PlaySource> {
     }
 }
 
-/// Pre-flight voice checks of `mode=play`; returns the reply text on failure.
+/// Pre-flight voice checks of `/play`; returns the reply text on failure.
 fn voice_join_problem(
     app: &App,
     guild_id: Id<GuildMarker>,
@@ -598,15 +598,32 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
     }
 }
 
-pub async fn execute(ix: &Ix<'_>) -> Result<()> {
+/// Slash commands handled here; each one is a former `/music mode:<name>`.
+pub const COMMANDS: [&str; 14] = [
+    "play",
+    "pause",
+    "resume",
+    "skip",
+    "stop",
+    "queue",
+    "nowplaying",
+    "volume",
+    "remove",
+    "move",
+    "seek",
+    "clear",
+    "loop",
+    "reconnect",
+];
+
+pub async fn execute(ix: &Ix<'_>, mode: &str) -> Result<()> {
     let Some(guild_id) = ix.guild_id() else {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("Ta komenda działa tylko na serwerze.")
             .await;
     };
     let app = ix.app;
     let opts = ix.opts();
-    let mode = opts.lower("mode");
     if mode == "play" {
         return execute_play(ix, guild_id).await;
     }
@@ -614,7 +631,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let voice = snapshot.as_ref().and_then(|s| s.voice_channel_id);
     let no_session = || ix.reply_ephemeral("Brak aktywnej sesji muzyki.");
 
-    match mode.as_str() {
+    match mode {
         "queue" => {
             let Some(s) = snapshot.filter(|s| s.current_track.is_some() || !s.queue.is_empty())
             else {
@@ -710,7 +727,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
             let Some(delta) = opts.integer("value").filter(|d| *d != 0) else {
                 return ix
-                    .reply_ephemeral("Dla mode=volume podaj `value`, np. `10` albo `-10`.")
+                    .reply_ephemeral("Podaj `value`, np. `10` albo `-10`.")
                     .await;
             };
             match app.music.adjust_volume(guild_id, delta).await? {
@@ -733,9 +750,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix.reply_ephemeral(error).await;
             }
             let Some(position) = opts.integer("position").filter(|p| *p > 0) else {
-                return ix
-                    .reply_ephemeral("Dla mode=remove podaj `position` >= 1.")
-                    .await;
+                return ix.reply_ephemeral("Podaj `position` >= 1.").await;
             };
             if s.queue.is_empty() {
                 return ix.reply_ephemeral("Kolejka jest pusta.").await;
@@ -781,7 +796,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
             let Some(position) = opts.string("time").as_deref().and_then(parse_timestamp) else {
                 return ix
-                    .reply_ephemeral("Dla mode=seek podaj `time`, np. `1:30` albo `90`.")
+                    .reply_ephemeral("Podaj `time`, np. `1:30` albo `90`.")
                     .await;
             };
             match app.music.seek(guild_id, position).await? {
@@ -804,13 +819,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix.reply_ephemeral(error).await;
             }
             let (Some(from), Some(to)) = (
-                opts.integer("position").filter(|p| *p > 0),
+                opts.integer("from").filter(|p| *p > 0),
                 opts.integer("to").filter(|p| *p > 0),
             ) else {
                 return ix
-                    .reply_ephemeral(
-                        "Dla mode=move podaj `position` (skąd) i `to` (dokąd), oba >= 1.",
-                    )
+                    .reply_ephemeral("Podaj `from` (skąd) i `to` (dokąd), oba >= 1.")
                     .await;
             };
             let len = s.queue.len() as i64;
@@ -832,6 +845,32 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .await
                 }
                 None => ix.reply_ephemeral("Nie udało się przenieść utworu.").await,
+            }
+        }
+        "loop" => {
+            if snapshot.is_none() {
+                return no_session().await;
+            }
+            if let Some(error) = require_same_voice(ix, voice) {
+                return ix.reply_ephemeral(error).await;
+            }
+            let target = opts.string("mode").map(|m| Repeat::parse(&m));
+            // Without `mode` it cycles off -> utwór -> kolejka like the panel button.
+            let mut next = app.music.cycle_loop(guild_id).await?;
+            if let Some(target) = target {
+                for _ in 0..2 {
+                    if next.as_ref().is_none_or(|s| s.repeat_mode == target) {
+                        break;
+                    }
+                    next = app.music.cycle_loop(guild_id).await?;
+                }
+            }
+            match next {
+                Some(s) => {
+                    ix.reply(json!({ "content": format!("Powtarzanie: **{}**.", format_repeat(s.repeat_mode)) }))
+                        .await
+                }
+                None => no_session().await,
             }
         }
         "clear" => {
