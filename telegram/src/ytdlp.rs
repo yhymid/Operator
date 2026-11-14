@@ -2072,4 +2072,48 @@ mod tests {
         assert!(html.contains("const mediaId = \"abc\";"));
         assert!(html.contains("type=\"video/mp4\""));
     }
+
+    /// Plain messages trigger downloads only for the three supported hosts; look-alike hosts
+    /// and non-http schemes must not get through.
+    #[test]
+    fn auto_links_and_url_validation_reject_lookalikes() {
+        for text in [
+            "https://tiktok.com.evil.example/x",
+            "https://eviltiktok.com/@a/video/1",
+            "https://youtube.com.evil.example/shorts/x",
+            "https://instagram.com/p/abc/",
+            "ftp://tiktok.com/x",
+        ] {
+            assert_eq!(extract_auto_media_url(text), None, "{text}");
+        }
+        assert_eq!(
+            extract_auto_media_url("https://VM.TikTok.com/ZM123/"),
+            Some("https://vm.tiktok.com/ZM123/".to_owned())
+        );
+        for raw in [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "http://",
+            "data:text/html,x",
+        ] {
+            assert!(normalize_url(raw).is_err(), "{raw}");
+        }
+        let long = format!("https://example.com/{}", "a".repeat(2100));
+        assert!(normalize_url(&long).is_err());
+        assert!(!is_youtube("https://youtube.com.evil.example/watch"));
+    }
+
+    #[test]
+    fn player_page_escapes_names() {
+        let html = player_html(
+            "id",
+            "</title><script>alert(1)</script>",
+            "video\"onerror=\"x.mp4",
+            ".mp4",
+            "tok",
+        );
+        assert!(!html.contains("<script>alert(1)"));
+        assert!(html.contains("&lt;/title&gt;&lt;script&gt;"));
+        assert!(html.contains("download=\"video&quot;onerror=&quot;x.mp4\""));
+    }
 }
