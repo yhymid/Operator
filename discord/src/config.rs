@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn example_config_is_valid() {
-        let raw = include_str!("../../../config.example.json");
+        let raw = include_str!("../deploy/config.example.json");
         let value: Value = serde_json::from_str(raw).unwrap();
         assert!(validate(&value).is_empty(), "{:?}", validate(&value));
     }

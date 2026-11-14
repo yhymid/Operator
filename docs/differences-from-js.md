@@ -1,6 +1,6 @@
-# operator-discord (Rust)
+# Operator Discord - roznice wzgledem wersji JS
 
-Port `main.js` + `src/` na Rust (`crates/operator-discord`). Te same komendy, teksty odpowiedzi,
+Port `main.js` + `src/` (wersja JS, dostepna w historii i na `main`) na Rust (`discord/`). Te same komendy, teksty odpowiedzi,
 pliki stanu (`cache/server/<guildId>.json`, `logs/server/...`, `cache/music-queue/...`), `config.json`
 i zmienne srodowiskowe co wersja JS - mozna przelaczac sie miedzy wersjami bez migracji.
 

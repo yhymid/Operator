@@ -1,5 +1,5 @@
 [Unit]
-Description=Operator Discord Bot
+Description=Operator Discord bot (Rust)
 After=network-online.target
 Wants=network-online.target
 
@@ -9,10 +9,10 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/srv/operator/app
 EnvironmentFile=/srv/operator/app/.env
-Environment=NODE_ENV=production
-ExecStart=/usr/bin/node /srv/operator/app/main.js
+ExecStart=/srv/operator/app/operator-discord
 Restart=always
 RestartSec=5
+KillSignal=SIGINT
 TimeoutStopSec=20
 SyslogIdentifier=operator
 

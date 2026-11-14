@@ -1,126 +1,56 @@
 # Deploy na VPS
 
-## Cel
+## 1. Zbuduj binarke
 
-Najbezpieczniejszy flow dla tego projektu:
-
-1. zmiany robimy lokalnie,
-2. testujemy lokalnie,
-3. dopiero gotowy pakiet wrzucamy na VPS,
-4. po deployu wykonujemy krotki smoke-check.
-
-## Zalecany runtime
-
-- Node.js `22.16.0`
-- npm `>=10`
-
-## Przygotowanie katalogow
-
-Przyklad:
+Na VPS (`curl https://sh.rustup.rs -sSf | sh`, potem):
 
 ```bash
-mkdir -p /srv/operator/app
-mkdir -p /srv/operator/data
-mkdir -p /srv/operator/logs
+git clone -b discord https://github.com/yhymid/Operator.git && cd Operator
+cargo build --release -p operator-discord
 ```
 
-## Zmienne srodowiskowe
+Albo zbuduj lokalnie i skopiuj `target/release/operator-discord` (ta sama architektura CPU).
 
-Przyklad:
+## 2. Katalogi i pliki
 
 ```bash
-export BOT_TOKEN=twoj_token
-export OWNER_IDS=123,456
-export OPERATOR_CONFIG_PATH=/srv/operator/app/config.json
-export OPERATOR_DATA_DIR=/srv/operator/data
-export OPERATOR_LOG_DIR=/srv/operator/logs
-export OPERATOR_SYNC_COMMANDS_ON_STARTUP=0
+sudo mkdir -p /srv/operator/app /srv/operator/data /srv/operator/logs
+sudo chown -R ubuntu:ubuntu /srv/operator
+cp target/release/operator-discord /srv/operator/app/
+cp discord/deploy/.env.example /srv/operator/app/.env            # uzupelnij
+cp discord/deploy/config.example.json /srv/operator/app/config.json
 ```
 
-## Kolejnosc deployu
-
-1. Wgraj kod do `/srv/operator/app`.
-2. Uruchom:
+W `.env` warto ustawic:
 
 ```bash
-npm ci
-npm run doctor
-npm test
+OPERATOR_CONFIG_PATH=/srv/operator/app/config.json
+OPERATOR_DATA_DIR=/srv/operator/data
+OPERATOR_LOG_DIR=/srv/operator/logs
+OPERATOR_SYNC_COMMANDS_ON_STARTUP=0
 ```
 
-3. Zarejestruj komendy:
+Przenosisz bota z wersji JS? Skopiuj stary `.env`, `config.json` oraz katalogi `cache/` i `logs/` -
+format jest ten sam.
+
+## 3. Sprawdzenie i komendy
 
 ```bash
-npm run commands:sync
+cd /srv/operator/app
+./operator-discord doctor
+./operator-discord commands sync
 ```
 
-4. Uruchom bota przez `systemd` albo PM2.
-
-Nie odpalaj produkcji przez zwykle `nohup node main.js` z sesji SSH. Na czesci VPS-ow proces potomny jest ubijany po zamknieciu sesji i bot "sam sie wylacza", mimo ze w logu aplikacji nie ma bledu.
-
-## Minimalny systemd service
-
-```ini
-[Unit]
-Description=Operator Discord Bot
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/srv/operator/app
-Environment=BOT_TOKEN=twoj_token
-Environment=OWNER_IDS=123,456
-Environment=OPERATOR_CONFIG_PATH=/srv/operator/app/config.json
-Environment=OPERATOR_DATA_DIR=/srv/operator/data
-Environment=OPERATOR_LOG_DIR=/srv/operator/logs
-Environment=OPERATOR_SYNC_COMMANDS_ON_STARTUP=0
-ExecStart=/usr/bin/node /srv/operator/app/main.js
-Restart=always
-RestartSec=5
-User=operator
-Group=operator
-
-[Install]
-WantedBy=multi-user.target
-```
-
-## Instalacja service krok po kroku
-
-1. Skopiuj gotowy szablon:
+## 4. systemd
 
 ```bash
-sudo cp docs/operator.service.example /etc/systemd/system/operator.service
-```
-
-2. Popraw sciezki i uzytkownika w pliku, jesli projekt lezy gdzie indziej niz `/srv/operator/app`.
-
-3. Przeladuj `systemd` i wlacz autostart:
-
-```bash
+sudo cp discord/deploy/operator-discord.service /etc/systemd/system/operator.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now operator.service
+sudo systemctl enable --now operator
+journalctl -u operator -f
 ```
 
-4. Sprawdz status i log:
+Aktualizacja: zbuduj nowa binarke, podmien `/srv/operator/app/operator-discord`,
+`sudo systemctl restart operator`.
 
-```bash
-systemctl status operator.service --no-pager
-journalctl -u operator.service -n 100 --no-pager
-```
-
-## Checklista po deployu
-
-1. `npm run doctor`
-2. `npm run commands:sync`
-3. `/health`
-4. `/debug mode:music`
-5. `/logs mode:status`
-6. test `verify`, `automod` i jeden prosty `announce`
-
-## Rollback
-
-1. zatrzymaj proces,
-2. przywroc poprzednia wersje kodu,
-3. przywroc backup `cache/` albo katalogu z `OPERATOR_DATA_DIR`,
-4. uruchom `npm run doctor`,
-5. uruchom bota ponownie.
+Nie uruchamiaj produkcji przez `nohup` z sesji SSH - proces potrafi zginac po wylogowaniu.
