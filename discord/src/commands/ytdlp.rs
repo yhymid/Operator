@@ -363,10 +363,13 @@ async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> 
 /// `cleanupExpiredMedia()`: removes published files older than 6 hours.
 pub async fn cleanup_expired_media() {
     let root = Settings::from_env().media_root;
-    let Ok(mut entries) = tokio::fs::read_dir(&root).await else {
+    cleanup_expired_in(&root, SystemTime::now() - MEDIA_TTL).await;
+}
+
+async fn cleanup_expired_in(root: &Path, cutoff: SystemTime) {
+    let Ok(mut entries) = tokio::fs::read_dir(root).await else {
         return;
     };
-    let cutoff = SystemTime::now() - MEDIA_TTL;
     while let Ok(Some(entry)) = entries.next_entry().await {
         if let Ok(meta) = entry.metadata().await
             && meta.is_file()
@@ -568,5 +571,37 @@ mod tests {
             .find(|c| c["name"] == "ytdlp")
             .unwrap();
         assert_eq!(entry["options"], definition()["options"]);
+    }
+
+    /// `YTDLP_MEDIA_ROOT` is a directory of the public website; the 6 h cleanup may only remove
+    /// what `publish` created (`<36 hex>.<ext>` and `<36 hex>.html`).
+    #[tokio::test]
+    async fn media_cleanup_only_touches_published_files() {
+        let root = std::env::temp_dir().join(format!("operator-media-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let token = "0123456789abcdef0123456789abcdef0123";
+        let old = SystemTime::now() - MEDIA_TTL - Duration::from_secs(60);
+        for name in [
+            format!("{token}.mp4"),
+            format!("{token}.html"),
+            "index.html".to_owned(),
+            "site.css".to_owned(),
+        ] {
+            let file = std::fs::File::create(root.join(&name)).unwrap();
+            file.set_modified(old).unwrap();
+        }
+        std::fs::File::create(root.join("fresh.html")).unwrap();
+
+        cleanup_expired_in(&root, SystemTime::now() - MEDIA_TTL).await;
+
+        let mut left: Vec<String> = std::fs::read_dir(&root)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(left, ["fresh.html", "index.html", "site.css"]);
     }
 }
