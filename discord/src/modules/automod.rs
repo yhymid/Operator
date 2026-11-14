@@ -584,4 +584,42 @@ mod tests {
             2
         );
     }
+
+    /// `blockedRegex` comes from config and is matched against every message. Patterns with
+    /// look-around/back-references run on fancy-regex's backtracking VM; its backtrack limit
+    /// must keep a catastrophic pattern bounded (the message is then not flagged).
+    #[test]
+    fn catastrophic_regex_is_bounded() {
+        let am = automod(json!({ "blockedRegex": ["^(?=a)(a+)+$", "(x+x+)+y\\1"] }));
+        let rules = am.cfg()["rules"].clone();
+        let content = format!("{}b", "a".repeat(40));
+        let started = Instant::now();
+        assert!(am.detect(&rules, &content, 0, None).is_none());
+        assert!(am.detect(&rules, &"x".repeat(40), 0, None).is_none());
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "regex evaluation took {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn allowed_domains_are_suffix_matched_on_label_boundaries() {
+        let am = automod(json!({ "blockLinks": true, "allowedDomains": ["youtube.com"] }));
+        let rules = am.cfg()["rules"].clone();
+        for ok in ["https://youtube.com/x", "https://www.youtube.com/watch?v=1"] {
+            assert!(am.detect(&rules, ok, 0, None).is_none(), "{ok}");
+        }
+        for bad in [
+            "https://notyoutube.com/x",
+            "https://youtube.com.evil.example/x",
+            "see https://evil.example/?r=https://youtube.com",
+        ] {
+            assert_eq!(
+                am.detect(&rules, bad, 0, None).map(|v| v.rule),
+                Some("blocked_link"),
+                "{bad}"
+            );
+        }
+    }
 }
