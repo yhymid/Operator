@@ -2,7 +2,7 @@
 
 Bot Discord napisany w Rust. To jest glowna linia **Discorda**; bot Telegram zyje na galezi
 [`telegram`](https://github.com/yhymid/Operator/tree/telegram). Dawna wersja JS (`discord.js`)
-zostala w historii i na `main`.
+zostala w historii git (tag `js-final`).
 
 ## Co potrafi
 
