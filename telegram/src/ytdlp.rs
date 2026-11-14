@@ -22,6 +22,7 @@ use crate::queue::{
 };
 use crate::settings::VideoCodec;
 use crate::status::StatusUpdater;
+use operator_common::media::{Encode, parse_probe, transcode_args};
 
 const BEST_FORMAT: &str = "bestvideo+bestaudio/best";
 
@@ -634,99 +635,15 @@ impl Bot {
     }
 }
 
-/// Codecs of the first video and audio stream (`ffprobe`).
-#[derive(Debug, Default, PartialEq)]
-struct StreamInfo {
-    video: Option<String>,
-    pix_fmt: Option<String>,
-    audio: Option<String>,
-}
+/// SVT-AV1 preset used by the Telegram bot (Discord reads `YTDLP_AV1_PRESET`).
+const AV1_PRESET: u8 = 6;
 
-fn parse_probe(output: &str) -> StreamInfo {
-    let value: Value = serde_json::from_str(output).unwrap_or(Value::Null);
-    let mut info = StreamInfo::default();
-    for stream in value["streams"].as_array().into_iter().flatten() {
-        let name = stream["codec_name"].as_str().map(str::to_owned);
-        match stream["codec_type"].as_str() {
-            Some("video") if info.video.is_none() => {
-                info.video = name;
-                info.pix_fmt = stream["pix_fmt"].as_str().map(str::to_owned);
-            }
-            Some("audio") if info.audio.is_none() => info.audio = name,
-            _ => {}
-        }
+fn encode(codec: VideoCodec, crf: Option<u32>) -> Encode {
+    Encode {
+        codec,
+        crf,
+        av1_preset: AV1_PRESET,
     }
-    info
-}
-
-/// ffmpeg arguments that turn `input` into `output` playable with the target codec.
-/// Streams that already match are copied; everything gets `+faststart` for streaming.
-fn transcode_args(
-    info: &StreamInfo,
-    codec: VideoCodec,
-    crf: Option<u32>,
-    input: &Path,
-    output: &Path,
-) -> (Vec<String>, bool) {
-    let eight_bit = matches!(info.pix_fmt.as_deref(), Some("yuv420p" | "yuvj420p"));
-    let video_ok = match codec {
-        VideoCodec::H264 => info.video.as_deref() == Some("h264") && eight_bit,
-        VideoCodec::Av1 => info.video.as_deref() == Some("av1") && eight_bit,
-        VideoCodec::Source => true,
-    };
-    let audio_ok = codec == VideoCodec::Source
-        || info.audio.is_none()
-        || matches!(info.audio.as_deref(), Some("aac" | "mp3"));
-    let mut args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-i"]
-        .map(str::to_owned)
-        .to_vec();
-    args.push(input.to_string_lossy().into_owned());
-    args.extend(["-map", "0:v:0", "-map", "0:a:0?"].map(str::to_owned));
-    let reencode = !video_ok;
-    if video_ok {
-        args.extend(["-c:v", "copy"].map(str::to_owned));
-    } else if codec == VideoCodec::Av1 {
-        let crf = crf.unwrap_or(30).to_string();
-        args.extend(
-            [
-                "-c:v",
-                "libsvtav1",
-                "-preset",
-                "6",
-                "-crf",
-                &crf,
-                "-pix_fmt",
-                "yuv420p",
-            ]
-            .map(str::to_owned),
-        );
-    } else {
-        // CRF 18 with x264 is visually transparent for almost all sources.
-        let crf = crf.unwrap_or(18).to_string();
-        args.extend(
-            [
-                "-c:v",
-                "libx264",
-                "-preset",
-                "slow",
-                "-crf",
-                &crf,
-                "-profile:v",
-                "high",
-                "-pix_fmt",
-                "yuv420p",
-            ]
-            .map(str::to_owned),
-        );
-    }
-    if audio_ok {
-        args.extend(["-c:a", "copy"].map(str::to_owned));
-    } else {
-        args.extend(["-c:a", "aac", "-b:a", "192k"].map(str::to_owned));
-    }
-    args.extend(["-movflags", "+faststart"].map(str::to_owned));
-    args.push(output.to_string_lossy().into_owned());
-    (args, reencode)
 }
 
 impl Bot {
@@ -769,7 +686,8 @@ impl Bot {
             return Ok(path.to_owned());
         }
         let output = path.with_file_name("delivery.mp4");
-        let (args, reencode) = transcode_args(&info, codec, self.settings.video_crf, path, &output);
+        let (args, reencode) =
+            transcode_args(&info, encode(codec, self.settings.video_crf), path, &output);
         log::info(
             "Przygotowuję plik do wysyłki",
             Some(json!({
@@ -2157,36 +2075,6 @@ mod tests {
             size_from_requested(&json!({"filesize": 0, "filesize_approx": 7})),
             Some(7.0)
         );
-    }
-
-    #[test]
-    fn transcode_decisions() {
-        let p = Path::new("/t/video.mp4");
-        let o = Path::new("/t/delivery.mp4");
-        let hevc = parse_probe(
-            r#"{"streams":[{"codec_type":"video","codec_name":"hevc","pix_fmt":"yuv420p10le"},{"codec_type":"audio","codec_name":"opus"}]}"#,
-        );
-        assert_eq!(hevc.video.as_deref(), Some("hevc"));
-        let (args, reencode) = transcode_args(&hevc, VideoCodec::H264, None, p, o);
-        assert!(reencode);
-        let joined = args.join(" ");
-        assert!(
-            joined.contains("-c:v libx264 -preset slow -crf 18 -profile:v high -pix_fmt yuv420p")
-        );
-        assert!(joined.contains("-c:a aac -b:a 192k"));
-        assert!(joined.ends_with("-movflags +faststart /t/delivery.mp4"));
-
-        let h264 = parse_probe(
-            r#"{"streams":[{"codec_type":"video","codec_name":"h264","pix_fmt":"yuv420p"},{"codec_type":"audio","codec_name":"aac"}]}"#,
-        );
-        let (args, reencode) = transcode_args(&h264, VideoCodec::H264, None, p, o);
-        assert!(!reencode);
-        assert!(args.join(" ").contains("-c:v copy -c:a copy"));
-
-        let (args, reencode) = transcode_args(&hevc, VideoCodec::Av1, Some(28), p, o);
-        assert!(reencode);
-        assert!(args.join(" ").contains("-c:v libsvtav1 -preset 6 -crf 28"));
-        assert!(!transcode_args(&hevc, VideoCodec::Source, None, p, o).1);
     }
 
     #[test]

@@ -15,7 +15,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-operator-common.workspace = true
+operator-common = { workspace = true, features = ["media"] }
 
 bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }

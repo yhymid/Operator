@@ -61,26 +61,7 @@ fn split_list(raw: &str) -> impl Iterator<Item = &str> {
         .filter(|v| !v.is_empty())
 }
 
-/// Target video codec for delivered files (`YTDLP_VIDEO_CODEC`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VideoCodec {
-    /// H.264 8-bit yuv420p + AAC in MP4: plays inline in Discord, Telegram and browsers.
-    H264,
-    /// AV1 8-bit (SVT-AV1) + AAC: smaller files; inline playback is not guaranteed everywhere.
-    Av1,
-    /// Keep whatever the source provides (only remux for fast start).
-    Source,
-}
-
-impl VideoCodec {
-    pub fn parse(raw: Option<&str>) -> Self {
-        match raw.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
-            Some("av1" | "av01") => Self::Av1,
-            Some("source" | "copy" | "original") => Self::Source,
-            _ => Self::H264,
-        }
-    }
-}
+pub use operator_common::media::VideoCodec;
 
 #[derive(Debug, Clone)]
 pub struct Settings {
@@ -175,7 +156,10 @@ impl Settings {
                 .collect(),
             size_probe: not_disabled("YTDLP_QUEUE_SIZE_PROBE"),
             probe_timeout_ms: positive_env("YTDLP_QUEUE_PROBE_TIMEOUT_SECONDS", 30) * 1000,
-            video_codec: VideoCodec::parse(std::env::var("YTDLP_VIDEO_CODEC").ok().as_deref()),
+            video_codec: VideoCodec::parse(
+                std::env::var("YTDLP_VIDEO_CODEC").ok().as_deref(),
+                VideoCodec::H264,
+            ),
             video_crf: std::env::var("YTDLP_VIDEO_CRF")
                 .ok()
                 .and_then(|v| v.trim().parse::<u32>().ok())
