@@ -298,7 +298,7 @@ impl Bot {
         let timeout = Duration::from_secs_f64(self.settings.download_timeout_secs.max(0.0));
         let status = tokio::select! {
             status = child.wait() => status,
-            () = tokio::time::sleep(timeout) => {
+            () = self.queue.sleep_active(timeout) => {
                 if let Some(pid) = child.id() {
                     let _ = crate::queue::signal_group(pid, Signal::SIGKILL);
                 }
@@ -459,7 +459,7 @@ impl Bot {
         });
         let status = tokio::select! {
             status = child.wait() => status,
-            () = tokio::time::sleep(timeout) => {
+            () = self.queue.sleep_active(timeout) => {
                 let _ = child.start_kill();
                 child.wait().await
             }

@@ -5,6 +5,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::time::{Duration, Instant};
 
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
@@ -168,6 +169,8 @@ pub struct Queue {
     pub max_per_user: usize,
     inner: Mutex<Inner>,
     runner: OnceLock<Runner>,
+    /// Time spent in `/ytdlp_admin pause` so far, and the start of the current pause.
+    pause_clock: Mutex<(Duration, Option<Instant>)>,
     this: Weak<Queue>,
 }
 
@@ -197,6 +200,7 @@ impl Queue {
                 ..Inner::default()
             }),
             runner: OnceLock::new(),
+            pause_clock: Mutex::new((Duration::ZERO, None)),
             this: this.clone(),
         })
     }
@@ -396,8 +400,34 @@ impl Queue {
             inner.paused = true;
             inner.running.clone()
         };
+        let mut clock = lock(&self.pause_clock);
+        if clock.1.is_none() {
+            clock.1 = Some(Instant::now());
+        }
+        drop(clock);
         for job in running {
             job.signal(Signal::SIGSTOP);
+        }
+    }
+
+    /// Total time spent paused (including a pause in progress).
+    fn paused_total(&self) -> Duration {
+        let clock = lock(&self.pause_clock);
+        clock.0 + clock.1.map_or(Duration::ZERO, |since| since.elapsed())
+    }
+
+    /// Sleeps until `timeout` of *unpaused* time has passed: a job stopped with
+    /// `/ytdlp_admin pause` must not run out of time while it cannot make progress.
+    pub async fn sleep_active(&self, timeout: Duration) {
+        let start = Instant::now();
+        let paused_at_start = self.paused_total();
+        loop {
+            let paused = self.paused_total().saturating_sub(paused_at_start);
+            let active = start.elapsed().saturating_sub(paused);
+            if active >= timeout {
+                return;
+            }
+            tokio::time::sleep((timeout - active).min(Duration::from_secs(5))).await;
         }
     }
 
@@ -412,6 +442,11 @@ impl Queue {
             inner.paused = false;
             inner.running.clone()
         };
+        let mut clock = lock(&self.pause_clock);
+        if let Some(since) = clock.1.take() {
+            clock.0 += since.elapsed();
+        }
+        drop(clock);
         for job in running {
             job.signal(Signal::SIGCONT);
         }
@@ -549,6 +584,28 @@ mod tests {
         // clear(): one running (cancel requested) + two waiting.
         assert_eq!(queue.clear(), 3);
         assert_eq!(queue.pending_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn job_timeouts_do_not_count_paused_time() {
+        let queue = Queue::new("t", 1, 5, 0);
+        let started = Instant::now();
+        let sleeper = {
+            let queue = queue.clone();
+            tokio::spawn(async move { queue.sleep_active(Duration::from_millis(300)).await })
+        };
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        queue.pause();
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(!sleeper.is_finished(), "timed out while paused");
+        queue.resume();
+        sleeper.await.unwrap();
+        // 300 ms active + ~400 ms paused.
+        assert!(
+            started.elapsed() >= Duration::from_millis(650),
+            "{:?}",
+            started.elapsed()
+        );
     }
 
     /// `/ytdlp_admin pause` stops the process with SIGSTOP; a later cancel/clear must still
