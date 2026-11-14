@@ -1,37 +1,8 @@
 [
   {
-    "options": [
-      {
-        "type": 3,
-        "choices": [
-          {
-            "name": "Start",
-            "value": "overview"
-          },
-          {
-            "name": "Muzyka",
-            "value": "music"
-          },
-          {
-            "name": "Moderacja",
-            "value": "moderation"
-          },
-          {
-            "name": "Ustawienia",
-            "value": "settings"
-          },
-          {
-            "name": "Owner",
-            "value": "owner"
-          }
-        ],
-        "name": "section",
-        "description": "Od razu otwórz wybraną sekcję",
-        "required": false
-      }
-    ],
+    "options": [],
     "name": "help",
-    "description": "Pokazuje interaktywny panel pomocy",
+    "description": "Lista komend",
     "dm_permission": false,
     "type": 1
   },

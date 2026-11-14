@@ -51,8 +51,7 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
         ],
         _ => &[
             "### Start",
-            "`/help section:<sekcja>` - otwiera od razu wybrany obszar",
-            "`/play ...` - odtwarzanie, kolejka i recovery",
+            "`/play`, `/skip`, `/queue`, `/nowplaying` ... - muzyka",
             "`/ytdlp url:<link>` - pobieranie video na kanał",
             "`/automod ...`, `/verify ...`, `/logs ...`, `/dm ...` - moderacja, verify i full logs",
             "`/settings ...`, `/health`, `/debug ...` - konfiguracja i diagnostyka",
@@ -86,14 +85,7 @@ pub fn panel_payload(app: &App, user_id: Id<UserMarker>, page: &str) -> Value {
             })
         })
         .collect();
-    let content = [
-        "## Operator Help".to_owned(),
-        "Interaktywny panel komend. Wybierz sekcję poniżej albo uruchom `/help section:<sekcja>`."
-            .to_owned(),
-        String::new(),
-        section_content(&selected, can_use_owner),
-    ]
-    .join("\n");
+    let content = section_content(&selected, can_use_owner);
     json!({
         "flags": FLAG_COMPONENTS_V2 | FLAG_EPHEMERAL,
         "components": [{
@@ -110,11 +102,7 @@ pub fn panel_payload(app: &App, user_id: Id<UserMarker>, page: &str) -> Value {
 }
 
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
-    let section = ix
-        .opts()
-        .string("section")
-        .unwrap_or_else(|| "overview".to_owned());
-    ix.reply(panel_payload(ix.app, ix.user_id(), &section))
+    ix.reply(panel_payload(ix.app, ix.user_id(), "overview"))
         .await
 }
 
