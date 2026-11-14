@@ -589,7 +589,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .save_announcements(&guild, json!({ "items": current.items }));
                 return ix
                     .reply_ephemeral(format!(
-                        "Dodano ogłoszenie `{code}` na <t:{}:F> (UTC) w <#{channel}>{from_profile}.",
+                        "Dodano ogłoszenie `{code}` na <t:{}:F> w <#{channel}>{from_profile}.",
                         chrono::DateTime::parse_from_rfc3339(&run_at).map_or(0, |d| d.timestamp())
                     ))
                     .await;

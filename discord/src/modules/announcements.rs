@@ -79,6 +79,7 @@ pub fn generate_code() -> String {
         .collect()
 }
 
+/// `YYYY-MM-DD HH:mm` in Polish time (Europe/Warsaw, DST-aware) → UTC ISO string.
 pub fn parse_datetime(input: &str) -> Result<String> {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let re = RE.get_or_init(|| {
@@ -87,12 +88,18 @@ pub fn parse_datetime(input: &str) -> Result<String> {
     let raw = input.trim();
     let caps = re
         .captures(raw)
-        .ok_or_else(|| anyhow!("Użyj formatu daty `YYYY-MM-DD HH:mm` (UTC)."))?;
+        .ok_or_else(|| anyhow!("Użyj formatu daty `YYYY-MM-DD HH:mm` (czas polski)."))?;
     let num = |i: usize| caps[i].parse::<u32>().unwrap_or(u32::MAX);
     let date = NaiveDate::from_ymd_opt(num(1) as i32, num(2), num(3))
         .and_then(|d| d.and_hms_opt(num(4), num(5), 0))
         .ok_or_else(|| anyhow!("Niepoprawna data lub godzina."))?;
-    Ok(operator_common::time::to_iso(Utc.from_utc_datetime(&date)))
+    // An hour skipped by the spring DST change does not exist; an ambiguous autumn hour takes
+    // the first occurrence.
+    let local = chrono_tz::Europe::Warsaw
+        .from_local_datetime(&date)
+        .earliest()
+        .ok_or_else(|| anyhow!("Ta godzina nie istnieje w czasie polskim (zmiana czasu)."))?;
+    Ok(operator_common::time::to_iso(local.with_timezone(&Utc)))
 }
 
 pub fn normalize_optional_text(value: Option<String>) -> Opt {
@@ -978,7 +985,19 @@ mod tests {
         assert!(normalize_profile_name(Some("!".into())).is_err());
         assert_eq!(
             parse_datetime("2026-04-20 18:30").unwrap(),
-            "2026-04-20T18:30:00.000Z"
+            "2026-04-20T16:30:00.000Z"
+        );
+        assert_eq!(
+            parse_datetime("2026-01-10 18:30").unwrap(),
+            "2026-01-10T17:30:00.000Z"
+        );
+        assert!(
+            parse_datetime("2026-03-29 02:30").is_err(),
+            "skipped by DST"
+        );
+        assert_eq!(
+            parse_datetime("2026-10-25 02:30").unwrap(),
+            "2026-10-25T00:30:00.000Z"
         );
         assert!(parse_datetime("2026-02-30 10:00").is_err());
         assert!(normalize_url(Some("ftp://x".into())).is_err());

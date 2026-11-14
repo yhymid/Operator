@@ -541,7 +541,7 @@
       {
         "type": 3,
         "name": "datetime",
-        "description": "Data i godzina UTC, np. 2026-04-20 18:30",
+        "description": "Data i godzina (czas polski), np. 2026-04-20 18:30",
         "required": false
       },
       {
