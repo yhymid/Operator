@@ -1,0 +1,899 @@
+[
+  {
+    "options": [
+      {
+        "type": 3,
+        "choices": [
+          {
+            "name": "Start",
+            "value": "overview"
+          },
+          {
+            "name": "Muzyka",
+            "value": "music"
+          },
+          {
+            "name": "Moderacja",
+            "value": "moderation"
+          },
+          {
+            "name": "Ustawienia",
+            "value": "settings"
+          },
+          {
+            "name": "Owner",
+            "value": "owner"
+          }
+        ],
+        "name": "section",
+        "description": "Od razu otworz wybrana sekcje",
+        "required": false
+      }
+    ],
+    "name": "help",
+    "description": "Pokazuje interaktywny panel pomocy",
+    "dm_permission": false,
+    "type": 1
+  },
+  {
+    "name": "settings",
+    "description": "Pokazuje i zmienia ustawienia operatora",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Tryb komendy settings",
+        "required": true,
+        "choices": [
+          {
+            "name": "show",
+            "value": "show"
+          },
+          {
+            "name": "set",
+            "value": "set"
+          }
+        ]
+      },
+      {
+        "type": 3,
+        "name": "section",
+        "description": "Sekcja ustawien",
+        "required": false,
+        "choices": [
+          {
+            "name": "autoclean",
+            "value": "autoclean"
+          },
+          {
+            "name": "automod",
+            "value": "automod"
+          },
+          {
+            "name": "verify",
+            "value": "verify"
+          }
+        ]
+      },
+      {
+        "type": 3,
+        "name": "option",
+        "description": "Klucz opcji, np. dry_run lub enabled",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "string_value",
+        "description": "Wartosc tekstowa albo \"clear\"",
+        "required": false
+      },
+      {
+        "type": 4,
+        "name": "integer_value",
+        "description": "Wartosc liczbowa",
+        "required": false
+      },
+      {
+        "type": 5,
+        "name": "boolean_value",
+        "description": "Wartosc true/false",
+        "required": false
+      },
+      {
+        "type": 7,
+        "name": "channel_value",
+        "description": "Wartosc kanalu lub kanal dla podgladu channel_settings",
+        "required": false
+      },
+      {
+        "type": 8,
+        "name": "role_value",
+        "description": "Wartosc roli",
+        "required": false
+      },
+      {
+        "type": 6,
+        "name": "user_value",
+        "description": "Wartosc uzytkownika",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "clean",
+    "description": "Komendy czyszczenia",
+    "dm_permission": false,
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Tryb komendy clean",
+        "required": true,
+        "choices": [
+          {
+            "name": "now",
+            "value": "now"
+          },
+          {
+            "name": "set",
+            "value": "set"
+          },
+          {
+            "name": "reset",
+            "value": "reset"
+          },
+          {
+            "name": "status",
+            "value": "status"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "cache",
+    "description": "Narzedzia cache",
+    "dm_permission": false,
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Tryb komendy cache",
+        "required": true,
+        "choices": [
+          {
+            "name": "serverinfo",
+            "value": "serverinfo"
+          }
+        ]
+      },
+      {
+        "type": 3,
+        "name": "id",
+        "description": "Guild ID (np. 1008460463148900373)",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "music",
+    "description": "Odtwarzanie muzyki",
+    "dm_permission": false,
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Tryb komendy music",
+        "required": true,
+        "choices": [
+          {
+            "name": "play",
+            "value": "play"
+          },
+          {
+            "name": "pause",
+            "value": "pause"
+          },
+          {
+            "name": "resume",
+            "value": "resume"
+          },
+          {
+            "name": "volume",
+            "value": "volume"
+          },
+          {
+            "name": "remove",
+            "value": "remove"
+          },
+          {
+            "name": "clear",
+            "value": "clear"
+          },
+          {
+            "name": "reconnect",
+            "value": "reconnect"
+          },
+          {
+            "name": "skip",
+            "value": "skip"
+          },
+          {
+            "name": "stop",
+            "value": "stop"
+          },
+          {
+            "name": "queue",
+            "value": "queue"
+          },
+          {
+            "name": "nowplaying",
+            "value": "nowplaying"
+          }
+        ]
+      },
+      {
+        "type": 3,
+        "name": "query",
+        "description": "Link lub fraza (YouTube/SoundCloud/Spotify/radio)",
+        "required": false
+      },
+      {
+        "type": 11,
+        "name": "audio",
+        "description": "Plik audio wrzucony na Discorda (dla mode=play)",
+        "required": false
+      },
+      {
+        "type": 4,
+        "name": "value",
+        "description": "Zmiana glosnosci dla mode=volume, np. 10 albo -10",
+        "required": false,
+        "min_value": -100,
+        "max_value": 100
+      },
+      {
+        "type": 4,
+        "name": "position",
+        "description": "Pozycja w kolejce dla mode=remove (1 = pierwszy po aktualnym)",
+        "required": false,
+        "min_value": 1,
+        "max_value": 500
+      }
+    ]
+  },
+  {
+    "name": "verify",
+    "description": "Panel i status weryfikacji",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Tryb komendy verify",
+        "required": true,
+        "choices": [
+          {
+            "name": "setup",
+            "value": "setup"
+          },
+          {
+            "name": "status",
+            "value": "status"
+          },
+          {
+            "name": "resend_panel",
+            "value": "resend_panel"
+          },
+          {
+            "name": "exception_add",
+            "value": "exception_add"
+          },
+          {
+            "name": "exception_remove",
+            "value": "exception_remove"
+          },
+          {
+            "name": "expire_user",
+            "value": "expire_user"
+          },
+          {
+            "name": "cleanup_state",
+            "value": "cleanup_state"
+          }
+        ]
+      },
+      {
+        "type": 8,
+        "name": "rola",
+        "description": "Rola zweryfikowanego (dla mode=setup)",
+        "required": false
+      },
+      {
+        "type": 6,
+        "name": "user",
+        "description": "Uzytkownik dla exception_add/exception_remove/expire_user",
+        "required": false
+      },
+      {
+        "type": 7,
+        "name": "channel",
+        "description": "Kanal panelu dla setup/resend_panel",
+        "required": false,
+        "channel_types": [
+          0,
+          5
+        ]
+      }
+    ]
+  },
+  {
+    "name": "automod",
+    "description": "Status i zarzadzanie AutoMod",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 1,
+        "name": "status",
+        "description": "Pokazuje status AutoMod"
+      },
+      {
+        "type": 1,
+        "name": "test",
+        "description": "Sprawdza czy tresc wpada w regule AutoMod",
+        "options": [
+          {
+            "type": 3,
+            "name": "content",
+            "description": "Tresc do sprawdzenia",
+            "required": true
+          },
+          {
+            "type": 3,
+            "name": "type",
+            "description": "Test aktywnych regul albo konkretnej kandydatki",
+            "required": false,
+            "choices": [
+              {
+                "name": "Active rules",
+                "value": "live"
+              },
+              {
+                "name": "Blocked words",
+                "value": "word"
+              },
+              {
+                "name": "Blocked regex",
+                "value": "regex"
+              }
+            ]
+          },
+          {
+            "type": 3,
+            "name": "value",
+            "description": "Wartosc konkretnej reguly dla word/regex",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": 2,
+        "name": "rule",
+        "description": "Zarzadzanie listami regul AutoMod",
+        "options": [
+          {
+            "type": 1,
+            "name": "list",
+            "description": "Listuje zapisane reguly",
+            "options": [
+              {
+                "type": 3,
+                "name": "type",
+                "description": "Pokazuje wybrana grupe regul albo wszystko",
+                "required": false,
+                "choices": [
+                  {
+                    "name": "All managed rules",
+                    "value": "all"
+                  },
+                  {
+                    "name": "Blocked words",
+                    "value": "word"
+                  },
+                  {
+                    "name": "Blocked regex",
+                    "value": "regex"
+                  },
+                  {
+                    "name": "Allowed domains",
+                    "value": "allowed_domain"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": 1,
+            "name": "add",
+            "description": "Dodaje nowa regule do configu",
+            "options": [
+              {
+                "type": 3,
+                "name": "type",
+                "description": "Typ reguly",
+                "required": true,
+                "choices": [
+                  {
+                    "name": "Blocked words",
+                    "value": "word"
+                  },
+                  {
+                    "name": "Blocked regex",
+                    "value": "regex"
+                  },
+                  {
+                    "name": "Allowed domains",
+                    "value": "allowed_domain"
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "name": "value",
+                "description": "Wartosc reguly",
+                "required": true
+              }
+            ]
+          },
+          {
+            "type": 1,
+            "name": "remove",
+            "description": "Usuwa regule z configu",
+            "options": [
+              {
+                "type": 3,
+                "name": "type",
+                "description": "Typ reguly",
+                "required": true,
+                "choices": [
+                  {
+                    "name": "Blocked words",
+                    "value": "word"
+                  },
+                  {
+                    "name": "Blocked regex",
+                    "value": "regex"
+                  },
+                  {
+                    "name": "Allowed domains",
+                    "value": "allowed_domain"
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "name": "value",
+                "description": "Wartosc reguly",
+                "required": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "announce",
+    "description": "Planowanie ogloszen przez webhook",
+    "dm_permission": false,
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Tryb komendy announce",
+        "required": true,
+        "choices": [
+          {
+            "name": "create",
+            "value": "create"
+          },
+          {
+            "name": "now",
+            "value": "now"
+          },
+          {
+            "name": "list",
+            "value": "list"
+          },
+          {
+            "name": "edit",
+            "value": "edit"
+          },
+          {
+            "name": "delete",
+            "value": "delete"
+          },
+          {
+            "name": "profile_create",
+            "value": "profile_create"
+          },
+          {
+            "name": "profile_list",
+            "value": "profile_list"
+          },
+          {
+            "name": "profile_edit",
+            "value": "profile_edit"
+          },
+          {
+            "name": "profile_delete",
+            "value": "profile_delete"
+          }
+        ]
+      },
+      {
+        "type": 3,
+        "name": "datetime",
+        "description": "Data i godzina UTC, np. 2026-04-20 18:30",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "content",
+        "description": "Tresc ogloszenia",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "profile",
+        "description": "Preset profilu (dla create/now)",
+        "required": false,
+        "autocomplete": true
+      },
+      {
+        "type": 3,
+        "name": "name",
+        "description": "Nazwa profilu (dla profile_*)",
+        "required": false,
+        "autocomplete": true
+      },
+      {
+        "type": 3,
+        "name": "id",
+        "description": "ID/kod ogloszenia (dla edit/delete)",
+        "required": false,
+        "autocomplete": true
+      },
+      {
+        "type": 3,
+        "name": "send_mode",
+        "description": "Jak wyslac announcement",
+        "required": false,
+        "choices": [
+          {
+            "name": "message",
+            "value": "message"
+          },
+          {
+            "name": "embed",
+            "value": "embed"
+          },
+          {
+            "name": "components",
+            "value": "components"
+          }
+        ]
+      },
+      {
+        "type": 7,
+        "name": "channel",
+        "description": "Kanal docelowy",
+        "required": false,
+        "channel_types": [
+          0,
+          5
+        ]
+      },
+      {
+        "type": 3,
+        "name": "title",
+        "description": "Tytul embeda",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "color",
+        "description": "Kolor embeda, np. #2F9E44",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "username",
+        "description": "Nazwa webhooka",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "avatar_url",
+        "description": "Avatar webhooka (URL)",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "button_label",
+        "description": "Label przycisku dla components",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "button_url",
+        "description": "URL przycisku dla components",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "logs",
+    "description": "Pelne logi serwera i konfiguracja kanalu logow",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Tryb komendy logs",
+        "required": true,
+        "choices": [
+          {
+            "name": "setup",
+            "value": "setup"
+          },
+          {
+            "name": "status",
+            "value": "status"
+          },
+          {
+            "name": "enable",
+            "value": "enable"
+          },
+          {
+            "name": "disable",
+            "value": "disable"
+          },
+          {
+            "name": "channel",
+            "value": "channel"
+          },
+          {
+            "name": "retention",
+            "value": "retention"
+          },
+          {
+            "name": "include_bots",
+            "value": "include_bots"
+          },
+          {
+            "name": "test",
+            "value": "test"
+          },
+          {
+            "name": "preview",
+            "value": "preview"
+          },
+          {
+            "name": "export_day",
+            "value": "export_day"
+          },
+          {
+            "name": "categories",
+            "value": "categories"
+          },
+          {
+            "name": "purge",
+            "value": "purge"
+          }
+        ]
+      },
+      {
+        "type": 7,
+        "name": "channel",
+        "description": "Kanal logow (dla setup/channel)",
+        "required": false,
+        "channel_types": [
+          0,
+          5
+        ]
+      },
+      {
+        "type": 4,
+        "name": "retention_days",
+        "description": "Ile dni trzymac pliki logow (1-365)",
+        "required": false,
+        "min_value": 1,
+        "max_value": 365
+      },
+      {
+        "type": 5,
+        "name": "value",
+        "description": "Wartosc true/false dla include_bots albo categories",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "day",
+        "description": "Dzien logu w formacie YYYY-MM-DD",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "category",
+        "description": "Kategoria do wlaczenia lub wylaczenia",
+        "required": false,
+        "choices": [
+          {
+            "name": "all",
+            "value": "all"
+          },
+          {
+            "name": "System",
+            "value": "system"
+          },
+          {
+            "name": "Command",
+            "value": "command"
+          },
+          {
+            "name": "Moderation",
+            "value": "moderation"
+          },
+          {
+            "name": "Member",
+            "value": "member"
+          },
+          {
+            "name": "Message",
+            "value": "message"
+          },
+          {
+            "name": "Reaction",
+            "value": "reaction"
+          },
+          {
+            "name": "Channel",
+            "value": "channel"
+          },
+          {
+            "name": "Role",
+            "value": "role"
+          },
+          {
+            "name": "Thread",
+            "value": "thread"
+          },
+          {
+            "name": "Voice",
+            "value": "voice"
+          },
+          {
+            "name": "Invite",
+            "value": "invite"
+          },
+          {
+            "name": "Emoji",
+            "value": "emoji"
+          },
+          {
+            "name": "Sticker",
+            "value": "sticker"
+          },
+          {
+            "name": "Webhook",
+            "value": "webhook"
+          },
+          {
+            "name": "Guild",
+            "value": "guild"
+          },
+          {
+            "name": "Audit",
+            "value": "audit"
+          },
+          {
+            "name": "AutoMod",
+            "value": "automod"
+          }
+        ]
+      },
+      {
+        "type": 4,
+        "name": "older_than_days",
+        "description": "Purge plikow starszych niz X dni",
+        "required": false,
+        "min_value": 1,
+        "max_value": 3650
+      },
+      {
+        "type": 5,
+        "name": "confirm",
+        "description": "Potwierdza purge logow",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "health",
+    "description": "Szybki stan bota i kluczowych modulow",
+    "dm_permission": false,
+    "default_member_permissions": "8"
+  },
+  {
+    "name": "debug",
+    "description": "Diagnostyka muzyki, uprawnien i logow",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 3,
+        "name": "mode",
+        "description": "Zakres diagnostyki",
+        "required": true,
+        "choices": [
+          {
+            "name": "music",
+            "value": "music"
+          },
+          {
+            "name": "permissions",
+            "value": "permissions"
+          },
+          {
+            "name": "logs",
+            "value": "logs"
+          }
+        ]
+      },
+      {
+        "type": 7,
+        "name": "channel",
+        "description": "Opcjonalny kanal do sprawdzenia uprawnien",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "dm",
+    "description": "Wysyla prywatna wiadomosc do usera albo roli",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 3,
+        "name": "message",
+        "description": "Tresc wiadomosci prywatnej",
+        "required": true
+      },
+      {
+        "type": 6,
+        "name": "user",
+        "description": "Jeden odbiorca wiadomosci",
+        "required": false
+      },
+      {
+        "type": 8,
+        "name": "role",
+        "description": "Rola, do ktorej czlonkow wyslac wiadomosc",
+        "required": false
+      },
+      {
+        "type": 5,
+        "name": "confirm",
+        "description": "Wymagane przy wysylce masowej do roli",
+        "required": false
+      }
+    ]
+  }
+]

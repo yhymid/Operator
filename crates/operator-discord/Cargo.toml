@@ -1,0 +1,46 @@
+[package]
+name = "operator-discord"
+description = "Operator Discord bot (Rust rewrite)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "operator-discord"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+operator-common.workspace = true
+
+chrono-tz = { version = "0.10.4", default-features = false, features = ["std"] }
+croner = "4.0.3"
+fancy-regex = "0.20.2"
+http = "1.5.0"
+futures-util = { version = "0.3.34", default-features = false, features = ["std", "sink"] }
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", default-features = false }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "tls12", "ring", "native-tokio"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "http1", "tokio"] }
+rand = "0.10.3"
+regex = "1.13.1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-websockets = { version = "0.13.3", default-features = false, features = ["client", "fastrand", "sha1_smol", "ring", "rustls-native-roots", "rustls-tls12"] }
+twilight-cache-inmemory = { version = "0.18.0", features = ["permission-calculator"] }
+twilight-gateway = { version = "0.18.0", default-features = false, features = ["rustls-native-roots", "twilight-http", "zstd"] }
+twilight-http = { version = "0.18.0", default-features = false, features = ["rustls-native-roots", "decompression"] }
+twilight-model = "0.18.0"
+twilight-util = { version = "0.18.0", features = ["builder", "permission-calculator", "snowflake"] }
+unicode-normalization = "0.1.26"
+url = "2.5.8"
+
+[lints]
+workspace = true

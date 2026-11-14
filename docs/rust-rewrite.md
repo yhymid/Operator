@@ -34,3 +34,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
+
+## Status
+
+- Discord: `crates/operator-discord`, opis i roznice w [rust-discord.md](rust-discord.md).
