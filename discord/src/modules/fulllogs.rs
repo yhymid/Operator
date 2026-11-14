@@ -614,7 +614,11 @@ pub struct CachedMessageLite {
 pub type GuildBefore = (String, Option<String>, Option<String>, u8);
 /// (channel, self_mute, self_deaf, server mute, server deaf)
 pub type VoiceBefore = (Option<Id<ChannelMarker>>, bool, bool, bool, bool);
-type DeliverySender = mpsc::UnboundedSender<(Id<ChannelMarker>, Value)>;
+type DeliverySender = mpsc::Sender<(Id<ChannelMarker>, Value)>;
+
+/// Discord-channel deliveries waiting per guild. Entries are already saved to the JSONL file,
+/// so during a raid the overflow is only missing from the log channel, not lost.
+const DELIVERY_QUEUE_LIMIT: usize = 1000;
 
 #[derive(Debug, Clone)]
 pub enum Before {
@@ -796,6 +800,7 @@ pub struct FullLogs {
     writes_inflight: AtomicUsize,
     delivery: Mutex<HashMap<String, DeliverySender>>,
     delivery_pending: Arc<AtomicUsize>,
+    delivery_dropped: std::sync::atomic::AtomicU64,
     audit_cache: Mutex<HashMap<String, AuditCached>>,
     audit_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     audit_inflight: AtomicUsize,
@@ -813,6 +818,7 @@ impl FullLogs {
             writes_inflight: AtomicUsize::new(0),
             delivery: Mutex::new(HashMap::new()),
             delivery_pending: Arc::new(AtomicUsize::new(0)),
+            delivery_dropped: std::sync::atomic::AtomicU64::new(0),
             audit_cache: Mutex::new(HashMap::new()),
             audit_locks: Mutex::new(HashMap::new()),
             audit_inflight: AtomicUsize::new(0),
@@ -1073,7 +1079,7 @@ impl FullLogs {
     ) {
         let mut delivery = self.delivery.lock().unwrap_or_else(|p| p.into_inner());
         let sender = delivery.entry(guild_id.to_owned()).or_insert_with(|| {
-            let (tx, mut rx) = mpsc::unbounded_channel::<(Id<ChannelMarker>, Value)>();
+            let (tx, mut rx) = mpsc::channel::<(Id<ChannelMarker>, Value)>(DELIVERY_QUEUE_LIMIT);
             let app = app.clone();
             let pending = Arc::clone(&self.delivery_pending);
             let guild = guild_id.to_owned();
@@ -1089,8 +1095,21 @@ impl FullLogs {
             tx
         });
         self.delivery_pending.fetch_add(1, Ordering::SeqCst);
-        if sender.send((channel_id, entry)).is_err() {
-            self.delivery_pending.fetch_sub(1, Ordering::SeqCst);
+        match sender.try_send((channel_id, entry)) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                self.delivery_pending.fetch_sub(1, Ordering::SeqCst);
+                let dropped = self.delivery_dropped.fetch_add(1, Ordering::SeqCst) + 1;
+                if dropped == 1 || dropped.is_multiple_of(100) {
+                    tracing::warn!(
+                        "FullLogs: kolejka wysylki dla {guild_id} pelna ({DELIVERY_QUEUE_LIMIT}); \
+                         pominieto na kanale {dropped} wpisow (sa w pliku logu)"
+                    );
+                }
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                self.delivery_pending.fetch_sub(1, Ordering::SeqCst);
+            }
         }
     }
 
