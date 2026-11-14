@@ -12,7 +12,6 @@ repository = "https://github.com/yhymid/Operator"
 [workspace.dependencies]
 anyhow = "1.0.104"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
-dotenvy = "0.15.7"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
@@ -22,7 +21,7 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 operator-common = { path = "common" }
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
