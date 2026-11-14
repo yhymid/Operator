@@ -13,6 +13,9 @@ use hyper_util::rt::TokioExecutor;
 use serde_json::Value;
 
 const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
+/// Upper bound for one request including the body. Lavalink calls are made while the music
+/// player map is locked, so a stalled node must not block every guild forever.
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 type HttpClient = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
 
@@ -34,6 +37,7 @@ pub struct JsonClient {
     base: String,
     authorization: String,
     user_agent: String,
+    timeout: std::time::Duration,
 }
 
 impl JsonClient {
@@ -46,7 +50,14 @@ impl JsonClient {
                 "DiscordBot (https://github.com/yhymid/Operator, {})",
                 env!("CARGO_PKG_VERSION")
             ),
+            timeout: REQUEST_TIMEOUT,
         })
+    }
+
+    #[cfg(test)]
+    fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.timeout = timeout;
+        self
     }
 
     /// Sends a request; returns the parsed JSON body (`Value::Null` for empty bodies).
@@ -63,12 +74,16 @@ impl JsonClient {
             }
             None => Bytes::new(),
         };
-        let response = self
-            .client
-            .request(builder.body(Full::new(payload))?)
-            .await?;
-        let status = response.status();
-        let bytes = response.into_body().collect().await?.to_bytes();
+        let request = builder.body(Full::new(payload))?;
+        let exchange = async {
+            let response = self.client.request(request).await?;
+            let status = response.status();
+            let bytes = response.into_body().collect().await?.to_bytes();
+            anyhow::Ok((status, bytes))
+        };
+        let (status, bytes) = tokio::time::timeout(self.timeout, exchange)
+            .await
+            .with_context(|| format!("request {path} timed out after {:?}", self.timeout))??;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&bytes);
             let message = serde_json::from_slice::<Value>(&bytes)
@@ -99,5 +114,31 @@ impl RawRest {
     pub async fn put_json(&self, path: &str, body: &Value) -> Result<()> {
         self.inner.request(Method::PUT, path, Some(body)).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    /// A peer that accepts the connection but never answers (half-open Lavalink node).
+    #[tokio::test]
+    async fn request_times_out_on_silent_peer() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (_socket, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let client = JsonClient::new(&format!("http://{addr}/v4"), "pw", true)
+            .unwrap()
+            .with_timeout(Duration::from_millis(300));
+        let started = std::time::Instant::now();
+        let result = client.request(Method::GET, "/info", None).await;
+        assert!(result.is_err());
+        assert!(started.elapsed() < Duration::from_secs(5));
+        server.abort();
     }
 }
