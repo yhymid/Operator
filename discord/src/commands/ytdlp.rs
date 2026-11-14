@@ -1,7 +1,7 @@
 //! `/ytdlp url:<URL>` (port of `src/cmds/ytdlp.js` from the VPS build).
 //!
-//! Downloads the best video+audio with yt-dlp, makes it play inline in Discord (H.264 8-bit +
-//! AAC by default, see `YTDLP_VIDEO_CODEC`) and posts it as an attachment. Files above the
+//! Downloads the best video+audio with yt-dlp, makes it play inline in Discord (AV1 8-bit +
+//! AAC by default, H.264 optional, see `YTDLP_VIDEO_CODEC`) and posts it as an attachment. Files above the
 //! upload limit (or rejected by Discord as too large) are published on the website as a
 //! player page that is deleted after 6 hours.
 
@@ -46,9 +46,9 @@ impl Settings {
             .map(|v| v.to_ascii_lowercase())
             .as_deref()
         {
-            Some("av1" | "av01") => VideoCodec::Av1,
+            Some("h264" | "avc") => VideoCodec::H264,
             Some("source" | "copy" | "original") => VideoCodec::Source,
-            _ => VideoCodec::H264,
+            _ => VideoCodec::Av1,
         };
         let max_upload_bytes = env::var("YTDLP_MAX_UPLOAD_BYTES")
             .and_then(|v| v.parse::<f64>().ok())
