@@ -69,6 +69,22 @@ pub fn read_optional(path: &Path) -> Result<Option<Value>, ConfigError> {
     read(path).map(Some)
 }
 
+/// Serialises read-modify-write cycles of `config.json` inside this process: two commands
+/// changing different options at once must not overwrite each other's change.
+pub fn write_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Re-reads the file, applies `change` and writes it back, all under `write_lock`.
+pub fn update(path: &Path, change: impl FnOnce(&mut Value)) -> Result<(), ConfigError> {
+    let _guard = write_lock();
+    let mut value = read(path)?;
+    change(&mut value);
+    write(path, &value)
+}
+
 pub fn write(path: &Path, value: &Value) -> Result<(), ConfigError> {
     assert_valid(value, path)?;
     operator_common::fs::write_json_atomic(path, value)

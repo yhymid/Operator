@@ -225,6 +225,7 @@ enum Mutation {
 
 fn mutate_rule(app: &App, kind: &str, raw: &str, action: &str) -> Result<Mutation, String> {
     let value = normalize_rule_value(kind, raw)?;
+    let _guard = config::write_lock();
     let mut cfg = config::read(&app.paths.config_path).map_err(|e| e.to_string())?;
     let mut rules = managed_rules(&cfg);
     let Some((_, current)) = rules.iter_mut().find(|(k, _)| *k == kind) else {

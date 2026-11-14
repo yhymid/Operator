@@ -828,9 +828,10 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             _ => {}
         }
     } else {
-        let mut updated = cfg.clone();
-        config::set_path(&mut updated, def.path, next);
-        if let Err(error) = config::write(&app.paths.config_path, &updated) {
+        // Re-read under the lock: `cfg` is from before the awaits above.
+        if let Err(error) = config::update(&app.paths.config_path, |updated| {
+            config::set_path(updated, def.path, next);
+        }) {
             return ix
                 .reply_ephemeral(config::format_config_error(
                     &error,
