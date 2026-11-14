@@ -57,6 +57,8 @@ const MATCH_VARIANT_MARKERS: [&str; 14] = [
     "live",
 ];
 const IDLE_DISCONNECT_MS: f64 = 2.0 * 60.0 * 1000.0;
+/// Leave the voice channel when no human listener is left for this long (0 = never).
+const ALONE_DISCONNECT_MS: f64 = 60.0 * 1000.0;
 const TRACK_RECOVERY_COOLDOWN: Duration = Duration::from_secs(90);
 const MAX_VOICE_CHANNEL_STATUS_LENGTH: usize = 120;
 const MAX_PREVIOUS_TRACKS: usize = 25;
@@ -557,6 +559,7 @@ struct Player {
     recovery: HashMap<String, Instant>,
     errors: VecDeque<Instant>,
     idle_generation: u64,
+    alone_generation: u64,
 }
 
 impl Player {
@@ -599,6 +602,7 @@ impl Player {
             recovery: HashMap::new(),
             errors: VecDeque::new(),
             idle_generation: 0,
+            alone_generation: 0,
         }
     }
 
@@ -842,6 +846,7 @@ pub struct MusicManager {
     recovery_sources: Vec<String>,
     default_volume: i64,
     idle_disconnect_ms: f64,
+    alone_disconnect_ms: f64,
     error_threshold_ms: f64,
     error_max_amount: f64,
     queue_state_dir: PathBuf,
@@ -892,6 +897,7 @@ impl MusicManager {
             ),
             default_volume: js_round(env_number("LAVALINK_VOLUME", 80.0)),
             idle_disconnect_ms: env_number("MUSIC_IDLE_DISCONNECT_MS", IDLE_DISCONNECT_MS),
+            alone_disconnect_ms: env_number("MUSIC_ALONE_DISCONNECT_MS", ALONE_DISCONNECT_MS),
             error_threshold_ms: env_number("MUSIC_ERROR_THRESHOLD_MS", 120_000.0),
             error_max_amount: env_number("MUSIC_ERROR_MAX_AMOUNT", 30.0),
             queue_state_dir: queue_state_dir.to_path_buf(),
@@ -986,14 +992,80 @@ impl MusicManager {
         }
     }
 
-    /// Gateway `VOICE_STATE_UPDATE`; only the bot's own state matters.
-    pub async fn handle_voice_state(&self, app: &App, update: &VoiceStateUpdate) {
-        if update.0.user_id != app.bot_id {
-            return;
-        }
+    /// Gateway `VOICE_STATE_UPDATE`: the bot's own state drives reconnect/autoMove; anyone's
+    /// join/leave re-checks whether the bot is left alone in its channel.
+    pub async fn handle_voice_state(&self, app: &Arc<App>, update: &VoiceStateUpdate) {
         let Some(guild_id) = update.0.guild_id else {
             return;
         };
+        if update.0.user_id == app.bot_id {
+            self.handle_own_voice_state(app, guild_id, update).await;
+        }
+        self.check_alone(app, guild_id).await;
+    }
+
+    /// Number of non-bot members in `channel` according to the gateway cache. Users missing from
+    /// the cache count as listeners, so an incomplete cache never makes the bot leave.
+    fn human_listeners(app: &App, channel: Id<ChannelMarker>) -> usize {
+        app.cache.voice_channel_states(channel).map_or(0, |states| {
+            states
+                .filter(|state| {
+                    let user = state.user_id();
+                    user != app.bot_id && app.cache.user(user).is_none_or(|u| !u.bot)
+                })
+                .count()
+        })
+    }
+
+    async fn check_alone(&self, app: &Arc<App>, guild_id: Id<GuildMarker>) {
+        if self.alone_disconnect_ms <= 0.0 {
+            return;
+        }
+        let generation = {
+            let mut players = self.players.lock().await;
+            let Some(player) = players.get_mut(&guild_id) else {
+                return;
+            };
+            let alone = player
+                .voice_channel_id
+                .is_some_and(|channel| Self::human_listeners(app, channel) == 0);
+            // Any change invalidates a pending timer; a new one starts only while alone.
+            player.alone_generation += 1;
+            if !alone {
+                return;
+            }
+            player.alone_generation
+        };
+        let delay = Duration::from_millis(self.alone_disconnect_ms as u64);
+        let app = app.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            let still_alone = app
+                .music
+                .players
+                .lock()
+                .await
+                .get(&guild_id)
+                .is_some_and(|p| {
+                    p.alone_generation == generation
+                        && p.voice_channel_id
+                            .is_some_and(|channel| Self::human_listeners(&app, channel) == 0)
+                });
+            if still_alone {
+                tracing::info!("Music: nikt nie slucha, rozlaczam guild={guild_id}");
+                app.music
+                    .destroy(&app, guild_id, "alone in voice channel")
+                    .await;
+            }
+        });
+    }
+
+    async fn handle_own_voice_state(
+        &self,
+        app: &App,
+        guild_id: Id<GuildMarker>,
+        update: &VoiceStateUpdate,
+    ) {
         let mut players = self.players.lock().await;
         let Some(player) = players.get_mut(&guild_id) else {
             return;
