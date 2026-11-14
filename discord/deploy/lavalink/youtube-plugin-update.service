@@ -1,0 +1,16 @@
+[Unit]
+Description=Update Lavalink youtube-source plugin snapshot (only when idle, with rollback)
+After=network-online.target lavalink.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Optional overrides: LAVALINK_DIR, LAVALINK_URL, LAVALINK_PASSWORD, HEALTH_VIDEO_ID, DRY_RUN.
+EnvironmentFile=-/etc/operator/youtube-plugin-update.env
+ExecStart=/usr/local/bin/youtube-plugin-update.sh
+# Runs as root only to `systemctl restart lavalink`; files are written in place (owner kept).
+ProtectSystem=strict
+ReadWritePaths=/srv/operator/lavalink
+PrivateTmp=true
+NoNewPrivileges=true
+SyslogIdentifier=yt-plugin-update

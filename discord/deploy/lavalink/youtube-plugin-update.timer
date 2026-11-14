@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for a new youtube-source snapshot every 3 hours
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=3h
+RandomizedDelaySec=20min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
