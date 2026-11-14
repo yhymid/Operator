@@ -174,8 +174,17 @@ impl StateStore {
         f(entry)
     }
 
+    #[cfg(test)]
     pub fn load(&self, guild_id: &str) -> Value {
         self.with_cached(guild_id, |state| state.clone())
+    }
+
+    /// One top-level section (`Null` when missing) without cloning the whole guild state;
+    /// `logs` is read on every gateway event by the full-logs module.
+    fn section(&self, guild_id: &str, key: &str) -> Value {
+        self.with_cached(guild_id, |state| {
+            state.get(key).cloned().unwrap_or(Value::Null)
+        })
     }
 
     /// Applies `mutate` to the cached state and persists it atomically.
@@ -277,7 +286,7 @@ impl StateStore {
     // --- autoclean -------------------------------------------------------------------------
 
     pub fn autoclean(&self, guild_id: &str) -> Value {
-        self.load(guild_id)["autoclean"].clone()
+        self.section(guild_id, "autoclean")
     }
 
     pub fn save_autoclean(&self, guild_id: &str, patch: Value) {
@@ -359,7 +368,7 @@ impl StateStore {
     // --- verification ----------------------------------------------------------------------
 
     pub fn verification(&self, guild_id: &str) -> Value {
-        self.load(guild_id)["verification"].clone()
+        self.section(guild_id, "verification")
     }
 
     /// Merges `patch` into `verification`; `expirations`, `challenges` and `lockouts` replace.
@@ -482,7 +491,7 @@ impl StateStore {
     // --- announcements ---------------------------------------------------------------------
 
     pub fn announcements(&self, guild_id: &str) -> Value {
-        self.load(guild_id)["announcements"].clone()
+        self.section(guild_id, "announcements")
     }
 
     /// `webhooks` and `profiles` replace; `webhookToken` is stripped from items.
@@ -500,7 +509,7 @@ impl StateStore {
     // --- logs ------------------------------------------------------------------------------
 
     pub fn logs(&self, guild_id: &str) -> Value {
-        self.load(guild_id)["logs"].clone()
+        self.section(guild_id, "logs")
     }
 
     pub fn save_logs(&self, guild_id: &str, patch: Value) {
