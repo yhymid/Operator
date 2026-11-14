@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde_json::json;
 use twilight_model::guild::Permissions;
 
-use crate::discord::{self, FLAG_EPHEMERAL, Ix, panel};
+use crate::discord::{self, Ix, panel};
 use crate::modules::fulllogs::{
     LogsState, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, category_keys, category_meta,
     is_valid_day_key, normalize_disabled_categories, normalize_retention, resolve_logs_state,
@@ -408,13 +408,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     ))
                     .await;
             }
-            let exported = async {
-                let Some((path, name)) = app.fulllogs.export_day(guild_id, &day).await? else {
-                    return anyhow::Ok(None);
-                };
-                Ok(Some((tokio::fs::read(&path).await?, name)))
-            }
-            .await;
+            let exported = app.fulllogs.export_day(guild_id, &day).await;
             match exported {
                 Ok(None) => {
                     ix.reply(panel(
@@ -423,13 +417,26 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     ))
                     .await
                 }
-                Ok(Some((bytes, name))) => {
-                    ix.reply(json!({
-                        "flags": FLAG_EPHEMERAL,
-                        "content": format!("Eksport dnia `{day}` gotowy."),
-                        "files": [discord::file(&name, bytes)],
-                    }))
-                    .await
+                Ok(Some((path, name))) => {
+                    // A day of logs can be many MB: acknowledge first, then upload.
+                    ix.defer(true).await?;
+                    match tokio::fs::read(&path).await {
+                        Ok(bytes) => {
+                            ix.edit_with_file(
+                                &format!("Eksport dnia `{day}` gotowy."),
+                                &name,
+                                bytes,
+                            )
+                            .await
+                        }
+                        Err(error) => {
+                            ix.edit_content(format!(
+                                "Nie udało się wyeksportować logu: {}",
+                                inline(&error.to_string(), 220)
+                            ))
+                            .await
+                        }
+                    }
                 }
                 Err(error) => {
                     ix.reply(panel(

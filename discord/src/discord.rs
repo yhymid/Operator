@@ -226,6 +226,31 @@ impl<'a> Ix<'a> {
         Ok(())
     }
 
+    /// Ephemeral reply with one attachment, sent as raw multipart bytes (no JSON byte array).
+    pub async fn reply_ephemeral_file(
+        &self,
+        content: &str,
+        name: &str,
+        bytes: Vec<u8>,
+    ) -> Result<()> {
+        let payload = no_pings(json!({ "flags": FLAG_EPHEMERAL, "content": content }));
+        let mut data: InteractionResponseData =
+            serde_json::from_value(payload).context("invalid interaction payload")?;
+        data.attachments = Some(vec![HttpAttachment::from_bytes(name.to_owned(), bytes, 0)]);
+        let response = InteractionResponse {
+            kind: InteractionResponseType::ChannelMessageWithSource,
+            data: Some(data),
+        };
+        self.app
+            .http
+            .interaction(self.app.application_id)
+            .create_response(self.interaction.id, &self.interaction.token, &response)
+            .await
+            .context("create interaction response")?;
+        self.replied.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
     pub async fn reply_ephemeral(&self, content: impl Into<String>) -> Result<()> {
         self.reply(ephemeral(content)).await
     }
@@ -327,12 +352,9 @@ impl<'a> Ix<'a> {
     }
 }
 
-/// Files are passed as `"files": [{ "name": .., "bytes": [..] }]` inside our JSON payloads and
-/// converted to multipart attachments here.
-pub fn file(name: &str, bytes: Vec<u8>) -> Value {
-    json!({ "name": name, "bytes": bytes })
-}
-
+/// Small files may be passed as `"files": [{ "name": .., "bytes": [..] }]` inside JSON payloads
+/// and are converted to multipart attachments here. Large files go through
+/// `Ix::reply_ephemeral_file` / `Ix::edit_with_file`, which skip the JSON byte array.
 fn split_files(mut value: Value) -> (Value, Vec<HttpAttachment>) {
     let mut out = Vec::new();
     if let Some(files) = value.as_object_mut().and_then(|m| m.remove("files"))
