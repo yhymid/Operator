@@ -20,6 +20,7 @@ use operator_common::env;
 const MEDIA_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_UPLOAD_BYTES: u64 = 25 * 1024 * 1024;
+const DEFAULT_AV1_PRESET: u8 = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VideoCodec {
@@ -38,6 +39,7 @@ struct Settings {
     cookies: PathBuf,
     codec: VideoCodec,
     crf: Option<u32>,
+    av1_preset: u8,
     js_runtime: String,
 }
 
@@ -74,6 +76,12 @@ impl Settings {
             crf: env::var("YTDLP_VIDEO_CRF")
                 .and_then(|v| v.parse::<u32>().ok())
                 .filter(|v| *v <= 63),
+            // SVT-AV1 preset (0 = slowest/best .. 13 = fastest). 10 measured ~3x faster than 6 on the
+            // VPS (6 vCPU) for ~11% larger files and nearly the same SSIM.
+            av1_preset: env::var("YTDLP_AV1_PRESET")
+                .and_then(|v| v.parse::<u8>().ok())
+                .filter(|v| *v <= 13)
+                .unwrap_or(DEFAULT_AV1_PRESET),
             // yt-dlp needs a JS runtime for YouTube challenges; it only looks for deno by default.
             js_runtime: env::var("YTDLP_JS_RUNTIME").unwrap_or_else(|| "node".to_owned()),
         }
@@ -228,6 +236,7 @@ fn transcode_args(
     info: &StreamInfo,
     codec: VideoCodec,
     crf: Option<u32>,
+    av1_preset: u8,
     input: &Path,
     output: &Path,
 ) -> (Vec<String>, bool) {
@@ -249,12 +258,13 @@ fn transcode_args(
         args.extend(["-c:v", "copy"].map(str::to_owned));
     } else if codec == VideoCodec::Av1 {
         let crf = crf.unwrap_or(30).to_string();
+        let preset = av1_preset.to_string();
         args.extend(
             [
                 "-c:v",
                 "libsvtav1",
                 "-preset",
-                "6",
+                &preset,
                 "-crf",
                 &crf,
                 "-pix_fmt",
@@ -291,7 +301,7 @@ fn transcode_args(
 }
 
 /// Re-encodes HEVC/VP9/10-bit (Discord shows a frozen picture for HEVC) and remuxes for fast start.
-async fn ensure_compatible(ix: &Ix<'_>, settings: &Settings, path: &Path) -> Result<PathBuf> {
+async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> {
     if settings.codec == VideoCodec::Source {
         return Ok(path.to_owned());
     }
@@ -325,26 +335,20 @@ async fn ensure_compatible(ix: &Ix<'_>, settings: &Settings, path: &Path) -> Res
         return Ok(path.to_owned());
     }
     let output = path.with_file_name("delivery.mp4");
-    let (args, reencode) = transcode_args(&info, settings.codec, settings.crf, path, &output);
+    let (args, reencode) = transcode_args(
+        &info,
+        settings.codec,
+        settings.crf,
+        settings.av1_preset,
+        path,
+        &output,
+    );
     tracing::info!(
         "ytdlp delivery video={:?} pix_fmt={:?} audio={:?} reencode={reencode}",
         info.video,
         info.pix_fmt,
         info.audio
     );
-    if reencode {
-        let label = if settings.codec == VideoCodec::Av1 {
-            "AV1"
-        } else {
-            "H.264"
-        };
-        let _ = ix
-            .edit_content(format!(
-                "Konwertuje video do {label} (zrodlo: {}), zeby dzialalo w Discordzie...",
-                info.video.as_deref().unwrap_or("?")
-            ))
-            .await;
-    }
     run(&settings.ffmpeg, &args, None, DOWNLOAD_TIMEOUT)
         .await
         .map_err(|e| anyhow!("ffmpeg: {e}"))?;
@@ -482,7 +486,7 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
     let file = find_downloaded_file(dir)
         .await
         .ok_or_else(|| anyhow!("yt-dlp nie zwrocil pobranego pliku."))?;
-    let file = ensure_compatible(ix, settings, &file).await?;
+    let file = ensure_compatible(settings, &file).await?;
     let size = tokio::fs::metadata(&file).await?.len();
     if size > settings.max_upload_bytes {
         let link = publish(settings, &file).await?;
@@ -492,7 +496,7 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
         .file_name()
         .map_or("video.mp4".to_owned(), |n| n.to_string_lossy().into_owned());
     let bytes = tokio::fs::read(&file).await?;
-    match ix.edit_with_file("Gotowe:", &name, bytes).await {
+    match ix.edit_with_file("", &name, bytes).await {
         Ok(()) => Ok(()),
         Err(error) => {
             let text = format!("{error:#}");
@@ -541,14 +545,17 @@ mod tests {
         let hevc = parse_probe(
             r#"{"streams":[{"codec_type":"video","codec_name":"hevc","pix_fmt":"yuv420p10le"},{"codec_type":"audio","codec_name":"opus"}]}"#,
         );
-        let (args, reencode) = transcode_args(&hevc, VideoCodec::H264, None, p, o);
+        let (args, reencode) = transcode_args(&hevc, VideoCodec::H264, None, 10, p, o);
         assert!(reencode);
         assert!(args.join(" ").contains("-c:v libx264 -preset slow -crf 18"));
         assert!(args.join(" ").contains("-c:a aac -b:a 192k"));
         let h264 = parse_probe(
             r#"{"streams":[{"codec_type":"video","codec_name":"h264","pix_fmt":"yuv420p"},{"codec_type":"audio","codec_name":"aac"}]}"#,
         );
-        assert!(!transcode_args(&h264, VideoCodec::H264, None, p, o).1);
+        assert!(!transcode_args(&h264, VideoCodec::H264, None, 10, p, o).1);
+        let (args, reencode) = transcode_args(&h264, VideoCodec::Av1, None, 10, p, o);
+        assert!(reencode);
+        assert!(args.join(" ").contains("-c:v libsvtav1 -preset 10 -crf 30"));
     }
 
     #[test]

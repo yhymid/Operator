@@ -82,15 +82,16 @@ YouTube z VPS (sprawdzone 2026-11):
 
 1. yt-dlp pobiera najlepszy obraz i dzwiek (najwyzsza rozdzielczosc i FPS; przy remisie SDR i AV1).
 2. `ffprobe` sprawdza plik: obraz inny niz 8-bitowy AV1 (H.264, HEVC/H.265, VP9, 10-bit/HDR) jest
-   kodowany SVT-AV1 (`-preset 6`, CRF 30, `yuv420p`) - Discord pokazuje zamrozony obraz dla HEVC;
+   kodowany SVT-AV1 (`-preset 10`, CRF 30, `yuv420p`; `YTDLP_AV1_PRESET`) - Discord pokazuje zamrozony obraz dla HEVC;
    Opus -> AAC; pasujace strumienie sa kopiowane. Zawsze `+faststart`.
-   `YTDLP_VIDEO_CODEC=h264` przelacza na H.264 High CRF 18 (szybsze kodowanie, wieksze pliki).
-3. Plik do `YTDLP_MAX_UPLOAD_BYTES` (domyslnie 25 MiB) idzie jako zalacznik. Wiekszy - albo
+   `YTDLP_VIDEO_CODEC=h264` przelacza na H.264 High CRF 18 (najszersza zgodnosc, ok. 2,5x wieksze pliki).
+3. W trakcie widac tylko "Operator is thinking..."; gotowy plik jest wysylany bez tekstu.
+   Plik do `YTDLP_MAX_UPLOAD_BYTES` (domyslnie 25 MiB) idzie jako zalacznik. Wiekszy - albo
    odrzucony przez Discorda jako za duzy (serwer bez boostow ma nizszy limit) - trafia do
    `YTDLP_MEDIA_ROOT` jako player pod `YTDLP_MEDIA_BASE_URL`, kasowany po 6 godzinach.
 
-Zmienne: `YTDLP_PATH`, `YTDLP_COOKIES_PATH`, `YTDLP_VIDEO_CODEC=h264|av1|source`, `YTDLP_VIDEO_CRF`,
-`FFMPEG_PATH`, `FFPROBE_PATH` - opisane w `discord/deploy/.env.example`.
+Zmienne: `YTDLP_PATH`, `YTDLP_COOKIES_PATH`, `YTDLP_JS_RUNTIME`, `YTDLP_VIDEO_CODEC=h264|av1|source`,
+`YTDLP_VIDEO_CRF`, `YTDLP_AV1_PRESET`, `FFMPEG_PATH`, `FFPROBE_PATH` - opisane w `discord/deploy/.env.example`.
 
 ## Rozwoj
 
