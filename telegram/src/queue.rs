@@ -3,6 +3,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use nix::sys::signal::{Signal, kill};
@@ -48,6 +49,14 @@ pub struct Job {
     last_position: Mutex<Option<usize>>,
     status_text: Mutex<Option<String>>,
     process: Mutex<Option<u32>>,
+    cancel_requested: AtomicBool,
+}
+
+/// Sends `signal` to the process group led by `pid` (children are spawned with
+/// `process_group(0)`), so helpers started by yt-dlp (ffmpeg merges) are reached too.
+pub fn signal_group(pid: u32, signal: Signal) -> nix::Result<()> {
+    let pid = i32::try_from(pid).map_err(|_| nix::errno::Errno::EINVAL)?;
+    kill(Pid::from_raw(-pid), signal)
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -86,9 +95,14 @@ impl Job {
         *lock(&self.process) = pid;
     }
 
+    /// Set when a running job was cancelled; checked between processing steps.
+    pub fn cancel_requested(&self) -> bool {
+        self.cancel_requested.load(Ordering::SeqCst)
+    }
+
     fn signal(&self, signal: Signal) {
         if let Some(pid) = *lock(&self.process)
-            && let Err(error) = kill(Pid::from_raw(pid as i32), signal)
+            && let Err(error) = signal_group(pid, signal)
         {
             log::warn(
                 &format!("Nie udało się wysłać {signal:?} do zadania {}", self.id),
@@ -247,6 +261,7 @@ impl Queue {
                 last_position: Mutex::new(None),
                 status_text: Mutex::new(None),
                 process: Mutex::new(None),
+                cancel_requested: AtomicBool::new(false),
             });
             let index = inner.pending.iter().position(|candidate| {
                 job.priority < candidate.priority
@@ -361,7 +376,10 @@ impl Queue {
     }
 
     fn on_cancel(job: &Arc<Job>) {
+        job.cancel_requested.store(true, Ordering::SeqCst);
         job.signal(Signal::SIGTERM);
+        // A job paused with SIGSTOP only acts on a handled SIGTERM (ffmpeg) once continued.
+        job.signal(Signal::SIGCONT);
         job.status
             .set_detached(format!("❌ Zadanie {} zostało anulowane.", job.id));
     }
@@ -474,6 +492,7 @@ mod tests {
         let job = new_job(&queue, "a", None);
         let mut child = tokio::process::Command::new("sh")
             .args(["-c", "trap 'exit 0' TERM; while :; do sleep 0.05; done"])
+            .process_group(0)
             .kill_on_drop(true)
             .spawn()
             .expect("spawn sleep");

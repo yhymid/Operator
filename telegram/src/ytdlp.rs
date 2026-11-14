@@ -519,6 +519,7 @@ impl Bot {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .process_group(0)
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| spawn_error(program, &e))?;
@@ -564,6 +565,9 @@ impl Bot {
         let status = tokio::select! {
             status = child.wait() => status,
             () = tokio::time::sleep(timeout) => {
+                if let Some(pid) = child.id() {
+                    let _ = crate::queue::signal_group(pid, Signal::SIGKILL);
+                }
                 let _ = child.start_kill();
                 child.wait().await
             }
@@ -789,6 +793,7 @@ impl Bot {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
+            .process_group(0)
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| anyhow!("ffmpeg: {}", spawn_error(&self.settings.ffmpeg_path, &e)))?;
@@ -1672,7 +1677,10 @@ async fn process_job(bot: &Arc<Bot>, job: &Arc<Job>) {
     );
     let mut temp_dir: Option<PathBuf> = None;
     let result = deliver(bot, job, &mut temp_dir).await;
-    if let Err(error) = result {
+    if result.is_err() && job.cancel_requested() {
+        // `on_cancel` already replaced the status with the cancellation notice.
+        log::info("Zadanie /ytdlp anulowane", Some(json!({ "jobId": job.id })));
+    } else if let Err(error) = result {
         let message = error_text(&error);
         log::error(
             "Obsługa /ytdlp zakończona błędem",
@@ -1738,6 +1746,15 @@ fn warn_error(message: &str, error: &anyhow::Error) {
     log::warn(message, Some(json!(error_text(error))));
 }
 
+/// Stops a running job between steps once `/ytdlp_admin cancel|clear` was used: the signal
+/// only reaches a process that is running at that moment (not probes or uploads).
+fn ensure_not_canceled(job: &Job) -> Result<()> {
+    if job.cancel_requested() {
+        bail!("Zadanie {} zostało anulowane.", job.id);
+    }
+    Ok(())
+}
+
 async fn deliver(bot: &Arc<Bot>, job: &Arc<Job>, temp_dir: &mut Option<PathBuf>) -> Result<()> {
     let started = Instant::now();
     let url = job.url.clone();
@@ -1772,7 +1789,9 @@ async fn deliver(bot: &Arc<Bot>, job: &Arc<Job>, temp_dir: &mut Option<PathBuf>)
         progress_job.status.set_detached(text);
     });
     let file_path = bot.download(&url, &dir, on_progress, job).await?;
+    ensure_not_canceled(job)?;
     let file_path = bot.ensure_compatible(&file_path, job).await?;
+    ensure_not_canceled(job)?;
     let size = tokio::fs::metadata(&file_path).await?.len() as f64;
     if size > bot.settings.max_upload_bytes {
         log::warn(
