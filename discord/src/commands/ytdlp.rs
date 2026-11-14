@@ -21,6 +21,10 @@ const MEDIA_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_UPLOAD_BYTES: u64 = 25 * 1024 * 1024;
 const DEFAULT_AV1_PRESET: u8 = 10;
+/// Longer videos are refused before download (`YTDLP_MAX_DURATION_SECONDS`, 0 = no limit).
+const DEFAULT_MAX_DURATION_SECS: u64 = 30 * 60;
+/// yt-dlp aborts formats above this size (`YTDLP_MAX_DOWNLOAD_BYTES`, 0 = no limit).
+const DEFAULT_MAX_DOWNLOAD_BYTES: u64 = 1024 * 1024 * 1024;
 /// Interaction tokens expire 15 minutes after the defer; keep a margin for the final edit.
 const INTERACTION_BUDGET: Duration = Duration::from_secs(14 * 60);
 
@@ -49,6 +53,8 @@ struct Settings {
     crf: Option<u32>,
     av1_preset: u8,
     js_runtime: String,
+    max_duration_secs: u64,
+    max_download_bytes: u64,
 }
 
 impl Settings {
@@ -92,6 +98,12 @@ impl Settings {
                 .unwrap_or(DEFAULT_AV1_PRESET),
             // yt-dlp needs a JS runtime for YouTube challenges; it only looks for deno by default.
             js_runtime: env::var("YTDLP_JS_RUNTIME").unwrap_or_else(|| "node".to_owned()),
+            max_duration_secs: env::var("YTDLP_MAX_DURATION_SECONDS")
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(DEFAULT_MAX_DURATION_SECS),
+            max_download_bytes: env::var("YTDLP_MAX_DOWNLOAD_BYTES")
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(DEFAULT_MAX_DOWNLOAD_BYTES),
         }
     }
 
@@ -481,15 +493,10 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         );
     }
     if let Err(error) = result {
-        let details = last_line(&format!("{error:#}")).unwrap_or_default();
         tracing::error!("yt-dlp error: {error:#}");
-        let text = if details.is_empty() {
-            "Nie udalo sie pobrac video.".to_owned()
-        } else {
-            let short: String = details.chars().take(500).collect();
-            format!("Nie udalo sie pobrac video: {short}")
-        };
-        ix.edit_content(text).await?;
+        // Raw yt-dlp/ffmpeg output stays in the log: it can reveal paths or internal addresses.
+        ix.edit_content(friendly_error(&format!("{error:#}")))
+            .await?;
     }
     Ok(())
 }
@@ -506,6 +513,19 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
     .map(str::to_owned)
     .to_vec();
     args.extend(["--js-runtimes".to_owned(), settings.js_runtime.clone()]);
+    if settings.max_duration_secs > 0 {
+        // `!duration`: live streams and sites without a duration are not refused here.
+        args.extend([
+            "--match-filter".to_owned(),
+            format!("!duration | duration <= {}", settings.max_duration_secs),
+        ]);
+    }
+    if settings.max_download_bytes > 0 {
+        args.extend([
+            "--max-filesize".to_owned(),
+            settings.max_download_bytes.to_string(),
+        ]);
+    }
     if settings.codec != VideoCodec::Source {
         args.extend(["--merge-output-format", "mp4"].map(str::to_owned));
     }
@@ -518,12 +538,25 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
     args.push("-o".to_owned());
     args.push(dir.join("video.%(ext)s").to_string_lossy().into_owned());
     args.push(url.to_owned());
-    run(&settings.ytdlp, &args, Some(dir), DOWNLOAD_TIMEOUT)
+    let stdout = run(&settings.ytdlp, &args, Some(dir), DOWNLOAD_TIMEOUT)
         .await
         .map_err(|e| anyhow!(e))?;
-    let file = find_downloaded_file(dir)
-        .await
-        .ok_or_else(|| anyhow!("yt-dlp nie zwrocil pobranego pliku."))?;
+    let Some(file) = find_downloaded_file(dir).await else {
+        // Both limits make yt-dlp skip the video and still exit with success.
+        if stdout.contains("does not pass filter") {
+            bail!(
+                "Film jest dłuższy niż {} min.",
+                settings.max_duration_secs.div_ceil(60)
+            );
+        }
+        if stdout.contains("larger than max-filesize") {
+            bail!(
+                "Plik jest większy niż {} MB.",
+                settings.max_download_bytes / (1024 * 1024)
+            );
+        }
+        bail!("yt-dlp nie zwrocil pobranego pliku.");
+    };
     let file = ensure_compatible(settings, &file).await?;
     let size = tokio::fs::metadata(&file).await?.len();
     if size > settings.max_upload_bytes {
@@ -551,6 +584,42 @@ async fn download_and_send(ix: &Ix<'_>, settings: &Settings, url: &str, dir: &Pa
     }
 }
 
+/// Message for the channel. Known yt-dlp failures get a plain explanation; anything else is
+/// generic so raw tool output (paths, internal hosts) never reaches the chat.
+fn friendly_error(details: &str) -> String {
+    let lower = details.to_lowercase();
+    let reason =
+        if details.starts_with("Film jest dłuższy") || details.starts_with("Plik jest większy") {
+            details.lines().next().unwrap_or(details)
+        } else if lower.contains("przekroczono limit czasu") {
+            "Przekroczono limit czasu pobierania lub konwersji."
+        } else if lower.contains("confirm your age") || lower.contains("age-restricted") {
+            "Film ma ograniczenie wiekowe."
+        } else if lower.contains("sign in to confirm") || lower.contains("not a bot") {
+            "YouTube zablokował pobieranie (wymaga zalogowania). Trzeba odświeżyć cookies bota."
+        } else if lower.contains("private video") {
+            "Film jest prywatny."
+        } else if lower.contains("not available in your country")
+            || lower.contains("geo restrict")
+            || lower.contains("geo-restrict")
+        {
+            "Film jest niedostępny w regionie serwera."
+        } else if lower.contains("unsupported url") {
+            "Ten adres nie jest obsługiwany."
+        } else if lower.contains("video unavailable") || lower.contains("has been removed") {
+            "Film jest niedostępny."
+        } else if lower.contains("http error 403") {
+            "Serwer odmówił dostępu (403)."
+        } else if lower.contains("http error 404") {
+            "Nie znaleziono strony (404)."
+        } else if lower.contains("is live") || lower.contains("live event") {
+            "Transmisji na żywo nie da się pobrać."
+        } else {
+            return "Nie udało się pobrać video.".to_owned();
+        };
+    format!("Nie udało się pobrać video: {reason}")
+}
+
 /// Slash command definition (must match `commands.json`).
 #[cfg(test)]
 fn definition() -> Value {
@@ -575,6 +644,29 @@ mod tests {
         assert!(normalize_url("ftp://x").is_err());
         assert!(is_youtube("https://www.youtube.com/watch?v=x"));
         assert!(!is_youtube("https://notyoutube.com/"));
+    }
+
+    #[test]
+    fn friendly_errors() {
+        assert_eq!(
+            friendly_error("ERROR: [youtube] abc: Sign in to confirm you’re not a bot."),
+            "Nie udało się pobrać video: YouTube zablokował pobieranie (wymaga zalogowania). \
+             Trzeba odświeżyć cookies bota."
+        );
+        assert_eq!(
+            friendly_error("Film jest dłuższy niż 30 min."),
+            "Nie udało się pobrać video: Film jest dłuższy niż 30 min."
+        );
+        assert_eq!(
+            friendly_error(
+                "ERROR: Unable to download webpage: <urlopen error [Errno 111] Connection refused> (10.0.0.5)"
+            ),
+            "Nie udało się pobrać video."
+        );
+        assert_eq!(
+            friendly_error("ERROR: [generic] Unsupported URL: http://example.com/"),
+            "Nie udało się pobrać video: Ten adres nie jest obsługiwany."
+        );
     }
 
     #[test]
