@@ -2,6 +2,8 @@
 Description=Operator Discord bot (Rust)
 After=network-online.target
 Wants=network-online.target
+# Webhook notification, see scripts/ops/README.md (harmless if the template is not installed).
+OnFailure=operator-notify@%n.service
 
 [Service]
 Type=simple
