@@ -403,3 +403,89 @@ impl Queue {
             .count()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    fn new_job(queue: &Queue, url: &str, size: Option<f64>) -> Arc<Job> {
+        queue
+            .add(NewJob {
+                ctx: Ctx::new(&json!({ "update_id": 1 })),
+                url: url.to_owned(),
+                estimated_size: size,
+                status: StatusUpdater::noop(),
+                status_message_id: None,
+            })
+            .unwrap_or_else(|()| panic!("queue full"))
+    }
+
+    #[tokio::test]
+    async fn smaller_jobs_first_fifo_on_ties_and_limits() {
+        // No runner: the first job is moved to `running` and stays there.
+        let queue = Queue::new("t", 1, 3);
+        let running = new_job(&queue, "a", Some(10.0));
+        let unknown = new_job(&queue, "b", None);
+        let big = new_job(&queue, "c", Some(500.0));
+        let small = new_job(&queue, "d", Some(5.0));
+        assert_eq!(running.state(), JobState::Running);
+        let order: Vec<String> = queue
+            .active_and_pending()
+            .iter()
+            .map(|j| j.url.clone())
+            .collect();
+        assert_eq!(order, ["a", "d", "c", "b"]);
+        assert_eq!(queue.position(&running), Some(1));
+        assert_eq!(queue.position(&small), Some(2));
+        assert_eq!(queue.position(&unknown), Some(4));
+        assert!(
+            queue
+                .add(NewJob {
+                    ctx: Ctx::new(&json!({})),
+                    url: "e".into(),
+                    estimated_size: None,
+                    status: StatusUpdater::noop(),
+                    status_message_id: None,
+                })
+                .is_err(),
+            "max_pending counts waiting jobs only"
+        );
+
+        assert!(matches!(queue.cancel(&big), CancelOutcome::Canceled));
+        assert_eq!(big.state(), JobState::Canceled);
+        assert!(matches!(
+            queue.cancel(&big),
+            CancelOutcome::NotPending(JobState::Canceled)
+        ));
+        assert_eq!(queue.position(&unknown), Some(3));
+        // clear(): one running (cancel requested) + two waiting.
+        assert_eq!(queue.clear(), 3);
+        assert_eq!(queue.pending_count(), 0);
+    }
+
+    /// `/ytdlp_admin pause` stops the process with SIGSTOP; a later cancel/clear must still
+    /// terminate it. Linux kills a stopped process at once only when SIGTERM is fatal for it;
+    /// programs with a SIGTERM handler (ffmpeg, a shell `trap`) stay stopped until SIGCONT.
+    #[tokio::test]
+    async fn cancel_terminates_a_paused_process() {
+        let queue = Queue::new("t", 1, 5);
+        let job = new_job(&queue, "a", None);
+        let mut child = tokio::process::Command::new("sh")
+            .args(["-c", "trap 'exit 0' TERM; while :; do sleep 0.05; done"])
+            .kill_on_drop(true)
+            .spawn()
+            .expect("spawn sleep");
+        job.set_process(child.id());
+        // Let the shell install its trap first.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        queue.pause();
+        assert!(matches!(queue.cancel(&job), CancelOutcome::CancelRequested));
+        let exited = tokio::time::timeout(Duration::from_secs(3), child.wait()).await;
+        assert!(
+            exited.is_ok(),
+            "process paused with SIGSTOP ignored the cancel request"
+        );
+    }
+}

@@ -48,6 +48,20 @@ impl StatusUpdater {
         Self { tx }
     }
 
+    /// Updater that accepts and acknowledges every edit without talking to Telegram.
+    #[cfg(test)]
+    pub fn noop() -> Self {
+        let (tx, mut rx) = mpsc::unbounded_channel::<Edit>();
+        tokio::spawn(async move {
+            while let Some((_, ack)) = rx.recv().await {
+                if let Some(ack) = ack {
+                    let _ = ack.send(());
+                }
+            }
+        });
+        Self { tx }
+    }
+
     /// Queue an edit and wait until it (and everything before it) was applied.
     pub async fn set(&self, text: impl Into<String>) {
         let (ack, done) = oneshot::channel();
