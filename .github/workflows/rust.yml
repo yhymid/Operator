@@ -35,3 +35,24 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --locked
+
+  common-in-sync:
+    # discord and telegram each carry a copy of common/; warn when the copies differ.
+    # A warning, not a failure: right after pushing one branch the other is briefly behind.
+    if: github.event_name == 'push' && (github.ref_name == 'discord' || github.ref_name == 'telegram')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare common/ with the other branch
+        run: |
+          other=$([ "$GITHUB_REF_NAME" = discord ] && echo telegram || echo discord)
+          if git diff --quiet HEAD "origin/$other" -- common/; then
+            echo "common/ matches $other"
+          else
+            echo "::warning title=common/ out of sync::common/ differs from $other - run scripts/sync-common.sh $GITHUB_REF_NAME"
+            git diff --stat HEAD "origin/$other" -- common/
+          fi
