@@ -122,6 +122,19 @@ impl AutoMod {
 
     /// Returns `true` when the message was handled (violation applied).
     pub async fn handle_message(&self, app: &App, message: &Message) -> bool {
+        self.check(app, message, true).await
+    }
+
+    /// Edited message: same rules, but an edit is not a new message for duplicate tracking.
+    /// Discord also sends updates for embed unfurls; only real edits (`edited_timestamp`) count.
+    pub async fn handle_edit(&self, app: &App, message: &Message) -> bool {
+        if message.edited_timestamp.is_none() {
+            return false;
+        }
+        self.check(app, message, false).await
+    }
+
+    async fn check(&self, app: &App, message: &Message, track_duplicates: bool) -> bool {
         let cfg = self.cfg();
         if !config::is_true(&cfg, &["enabled"]) {
             return false;
@@ -146,7 +159,9 @@ impl AutoMod {
             &cfg["rules"],
             &message.content,
             mentions,
-            Some(&format!("{guild_id}:{}", message.author.id)),
+            track_duplicates
+                .then(|| format!("{guild_id}:{}", message.author.id))
+                .as_deref(),
         ) else {
             return false;
         };

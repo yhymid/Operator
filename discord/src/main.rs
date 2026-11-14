@@ -398,6 +398,11 @@ async fn handle_event(
                 app.automod.handle_message(&app, &message).await;
             }
         }
+        Event::MessageUpdate(message) => {
+            if !message.author.bot {
+                app.automod.handle_edit(&app, &message).await;
+            }
+        }
         Event::VoiceStateUpdate(update) => app.music.handle_voice_state(&app, &update).await,
         Event::VoiceServerUpdate(update) => app.music.handle_voice_server(&update).await,
         // discord.js only emits guildCreate for guilds joined after clientReady.
