@@ -6,6 +6,11 @@ use twilight_model::guild::Permissions;
 use crate::discord::{self, Ix};
 
 const BULK_DM_CONFIRM_THRESHOLD: usize = 10;
+/// Mass DMs are what gets bots flagged as spam; a role send is capped and paced.
+const BULK_DM_MAX_RECIPIENTS: usize = 200;
+const BULK_DM_PAUSE: std::time::Duration = std::time::Duration::from_secs(1);
+/// Stop before the 15-minute interaction token expires, so the summary can still be posted.
+const BULK_DM_BUDGET: std::time::Duration = std::time::Duration::from_secs(13 * 60);
 
 fn normalize_message(value: &str) -> Result<String, &'static str> {
     let text = value.trim();
@@ -76,6 +81,13 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let Some(role) = target_role else {
         return Ok(());
     };
+    // A server admin may DM one member; a role-wide send goes out under the bot's name to
+    // many people, so it is reserved for the bot owner.
+    if !ix.app.is_owner(ix.user_id()) {
+        return ix
+            .edit_content("Wysyłka DM do całej roli jest dostępna tylko dla ownera bota.")
+            .await;
+    }
 
     let Some(members) = discord::fetch_all_members(ix.app, guild_id).await else {
         return ix
@@ -92,6 +104,15 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .edit_content(format!(
                 "Rola <@&{}> nie ma żadnych odbiorców do wysyłki.",
                 role.id
+            ))
+            .await;
+    }
+    if targets.len() > BULK_DM_MAX_RECIPIENTS {
+        return ix
+            .edit_content(format!(
+                "Rola <@&{}> ma {} odbiorców; limit jednej wysyłki to {BULK_DM_MAX_RECIPIENTS}.",
+                role.id,
+                targets.len()
             ))
             .await;
     }
@@ -126,14 +147,30 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
 
     let mut sent = 0;
     let mut failures = Vec::new();
-    for user in &targets {
+    let started = std::time::Instant::now();
+    let mut stopped_early = false;
+    for (index, user) in targets.iter().enumerate() {
+        if started.elapsed() > BULK_DM_BUDGET {
+            stopped_early = true;
+            break;
+        }
+        if index > 0 {
+            tokio::time::sleep(BULK_DM_PAUSE).await;
+        }
         match discord::send_dm(ix.app, user.id, &message).await {
             Ok(()) => sent += 1,
             Err(error) => failures.push((format!("@{}", user.name), discord::err_text(&error))),
         }
     }
     let mut lines = vec![
-        format!("Wysyłka DM do roli <@&{}> zakończona.", role.id),
+        if stopped_early {
+            format!(
+                "Wysyłka DM do roli <@&{}> przerwana: kończy się czas odpowiedzi Discorda.",
+                role.id
+            )
+        } else {
+            format!("Wysyłka DM do roli <@&{}> zakończona.", role.id)
+        },
         format!("Targety: {}", targets.len()),
         format!("Sukces: {sent}"),
         format!("Błędy: {}", failures.len()),
