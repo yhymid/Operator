@@ -99,6 +99,10 @@ pub struct Settings {
     pub website_ttl_hours: u64,
     pub queue_concurrency: usize,
     pub queue_max_pending: usize,
+    /// Queued + running jobs per user (`YTDLP_QUEUE_MAX_PER_USER`, 0 = no limit).
+    pub queue_max_per_user: usize,
+    /// Chats the bot serves (`ALLOWED_CHAT_IDS`); empty = every chat. Admins are always served.
+    pub allowed_chat_ids: HashSet<i64>,
     pub size_probe: bool,
     pub probe_timeout_ms: u64,
     pub video_codec: VideoCodec,
@@ -161,6 +165,13 @@ impl Settings {
                 .to_owned(),
             queue_concurrency: positive_env("YTDLP_QUEUE_CONCURRENCY", 1) as usize,
             queue_max_pending: positive_env("YTDLP_QUEUE_MAX_PENDING", 20) as usize,
+            queue_max_per_user: std::env::var("YTDLP_QUEUE_MAX_PER_USER")
+                .ok()
+                .and_then(|v| v.trim().parse::<usize>().ok())
+                .unwrap_or(3),
+            allowed_chat_ids: split_list(&std::env::var("ALLOWED_CHAT_IDS").unwrap_or_default())
+                .filter_map(|v| v.parse::<i64>().ok())
+                .collect(),
             size_probe: not_disabled("YTDLP_QUEUE_SIZE_PROBE"),
             probe_timeout_ms: positive_env("YTDLP_QUEUE_PROBE_TIMEOUT_SECONDS", 30) * 1000,
             video_codec: VideoCodec::parse(std::env::var("YTDLP_VIDEO_CODEC").ok().as_deref()),

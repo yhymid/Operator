@@ -195,7 +195,24 @@ pub async fn handle_update(bot: Arc<Bot>, update: Value) -> anyhow::Result<()> {
     result
 }
 
+/// `ALLOWED_CHAT_IDS` gate: an empty list serves every chat; admins are served anywhere.
+fn chat_allowed(bot: &Bot, ctx: &Ctx) -> bool {
+    let allowed = &bot.settings.allowed_chat_ids;
+    allowed.is_empty()
+        || ctx.chat_id().is_some_and(|chat| allowed.contains(&chat))
+        || ctx
+            .sender_id()
+            .is_some_and(|user| bot.settings.admin_ids.contains(&user.to_string()))
+}
+
 async fn route(bot: &Arc<Bot>, ctx: &Ctx) -> anyhow::Result<()> {
+    if !chat_allowed(bot, ctx) {
+        log::debug(
+            "Pominięto aktualizację z czatu spoza ALLOWED_CHAT_IDS",
+            Some(json!({ "chatId": ctx.chat_id(), "userId": ctx.sender_id() })),
+        );
+        return Ok(());
+    }
     if ctx.message.is_object() {
         if ctx.text().is_none() {
             return Ok(());

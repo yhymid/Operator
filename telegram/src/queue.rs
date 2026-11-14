@@ -151,10 +151,21 @@ struct Inner {
     next_sequence: u64,
 }
 
+/// Why `Queue::add` refused a job.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddError {
+    /// `max_pending` waiting jobs already.
+    Full,
+    /// The sender already has `max_per_user` queued or running jobs.
+    UserLimit,
+}
+
 pub struct Queue {
     pub name: String,
     pub concurrency: usize,
     pub max_pending: usize,
+    /// Queued + running jobs one Telegram user may have (0 = no limit).
+    pub max_per_user: usize,
     inner: Mutex<Inner>,
     runner: OnceLock<Runner>,
     this: Weak<Queue>,
@@ -169,11 +180,17 @@ pub struct NewJob {
 }
 
 impl Queue {
-    pub fn new(name: &str, concurrency: usize, max_pending: usize) -> Arc<Self> {
+    pub fn new(
+        name: &str,
+        concurrency: usize,
+        max_pending: usize,
+        max_per_user: usize,
+    ) -> Arc<Self> {
         Arc::new_cyclic(|this| Self {
             name: name.to_owned(),
             concurrency: concurrency.max(1),
             max_pending: max_pending.max(1),
+            max_per_user,
             inner: Mutex::new(Inner {
                 next_id: 1,
                 next_sequence: 1,
@@ -232,13 +249,39 @@ impl Queue {
         Self::position_in(&lock(&self.inner), job)
     }
 
-    /// `add(task, metadata)`; `Err(())` when the queue is full.
-    pub fn add(&self, spec: NewJob) -> Result<Arc<Job>, ()> {
+    fn capacity_in(&self, inner: &Inner, user: Option<i64>) -> Result<(), AddError> {
+        if inner.pending.len() >= self.max_pending {
+            return Err(AddError::Full);
+        }
+        if self.max_per_user > 0
+            && let Some(user) = user
+        {
+            let owned = inner
+                .running
+                .iter()
+                .chain(inner.pending.iter())
+                .filter(|job| {
+                    matches!(job.state(), JobState::Queued | JobState::Running)
+                        && job.ctx.sender_id() == Some(user)
+                })
+                .count();
+            if owned >= self.max_per_user {
+                return Err(AddError::UserLimit);
+            }
+        }
+        Ok(())
+    }
+
+    /// Would `add` accept a job from `user` right now? Checked before the slow size probe.
+    pub fn check_capacity(&self, user: Option<i64>) -> Result<(), AddError> {
+        self.capacity_in(&lock(&self.inner), user)
+    }
+
+    /// `add(task, metadata)`; refused when the queue or the sender's share of it is full.
+    pub fn add(&self, spec: NewJob) -> Result<Arc<Job>, AddError> {
         let job = {
             let mut inner = lock(&self.inner);
-            if inner.pending.len() >= self.max_pending {
-                return Err(());
-            }
+            self.capacity_in(&inner, spec.ctx.sender_id())?;
             let id = format!("{}-{}", self.name, inner.next_id);
             inner.next_id += 1;
             let sequence = inner.next_sequence;
@@ -437,13 +480,38 @@ mod tests {
                 status: StatusUpdater::noop(),
                 status_message_id: None,
             })
-            .unwrap_or_else(|()| panic!("queue full"))
+            .unwrap_or_else(|error| panic!("queue refused: {error:?}"))
+    }
+
+    fn job_from(queue: &Queue, url: &str, user: i64) -> Result<Arc<Job>, AddError> {
+        queue.add(NewJob {
+            ctx: Ctx::new(&json!({ "update_id": 1, "message": { "from": { "id": user } } })),
+            url: url.to_owned(),
+            estimated_size: None,
+            status: StatusUpdater::noop(),
+            status_message_id: None,
+        })
+    }
+
+    #[tokio::test]
+    async fn per_user_limit_counts_running_and_waiting_jobs() {
+        let queue = Queue::new("t", 1, 10, 2);
+        let first = job_from(&queue, "a", 7).unwrap();
+        assert_eq!(first.state(), JobState::Running);
+        let second = job_from(&queue, "b", 7).unwrap();
+        assert_eq!(queue.check_capacity(Some(7)), Err(AddError::UserLimit));
+        assert_eq!(job_from(&queue, "c", 7).err(), Some(AddError::UserLimit));
+        // Someone else is not affected.
+        assert!(job_from(&queue, "d", 8).is_ok());
+        // A canceled job frees the slot.
+        queue.cancel(&second);
+        assert_eq!(queue.check_capacity(Some(7)), Ok(()));
     }
 
     #[tokio::test]
     async fn smaller_jobs_first_fifo_on_ties_and_limits() {
         // No runner: the first job is moved to `running` and stays there.
-        let queue = Queue::new("t", 1, 3);
+        let queue = Queue::new("t", 1, 3, 0);
         let running = new_job(&queue, "a", Some(10.0));
         let unknown = new_job(&queue, "b", None);
         let big = new_job(&queue, "c", Some(500.0));
@@ -488,7 +556,7 @@ mod tests {
     /// programs with a SIGTERM handler (ffmpeg, a shell `trap`) stay stopped until SIGCONT.
     #[tokio::test]
     async fn cancel_terminates_a_paused_process() {
-        let queue = Queue::new("t", 1, 5);
+        let queue = Queue::new("t", 1, 5, 0);
         let job = new_job(&queue, "a", None);
         let mut child = tokio::process::Command::new("sh")
             .args(["-c", "trap 'exit 0' TERM; while :; do sleep 0.05; done"])

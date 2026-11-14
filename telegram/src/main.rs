@@ -72,6 +72,7 @@ async fn run() -> ExitCode {
         "ytdlp",
         settings.queue_concurrency,
         settings.queue_max_pending,
+        settings.queue_max_per_user,
     );
 
     // `bot.launch()`: getMe → deleteWebhook → long polling.

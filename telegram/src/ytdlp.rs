@@ -17,7 +17,9 @@ use tokio::process::Command;
 use crate::api::{ApiError, is_rate_limit_error};
 use crate::bot::{Bot, Ctx};
 use crate::log;
-use crate::queue::{CancelOutcome, Job, JobState, NewJob, Queue, Runner, queue_status_text};
+use crate::queue::{
+    AddError, CancelOutcome, Job, JobState, NewJob, Queue, Runner, queue_status_text,
+};
 use crate::settings::VideoCodec;
 use crate::status::StatusUpdater;
 
@@ -1618,9 +1620,49 @@ fn estimate_line(estimated: Option<f64>) -> String {
     })
 }
 
+fn refused_text(queue: &Queue, error: AddError) -> String {
+    match error {
+        AddError::Full => format!(
+            "⚠️ Kolejka jest pełna (maksymalnie {} oczekujących zadań). Spróbuj ponownie później.",
+            queue.max_pending
+        ),
+        AddError::UserLimit => format!(
+            "⚠️ Masz już {} zadań w kolejce. Poczekaj, aż któreś się skończy.",
+            queue.max_per_user
+        ),
+    }
+}
+
+/// Refuses links to local/private addresses before yt-dlp sees them.
+async fn check_target(url: &str) -> Result<(), &'static str> {
+    let parsed = url::Url::parse(url).map_err(|_| "Podaj poprawny adres URL.")?;
+    let host = parsed.host_str().unwrap_or_default();
+    let port = parsed.port_or_known_default().unwrap_or(443);
+    operator_common::net::ensure_public_host(host, port).await
+}
+
 /// `enqueueYtdlp(ctx, url)`
 async fn enqueue(bot: &Arc<Bot>, ctx: &Ctx, url: String, requested_at: Instant) -> Result<()> {
     let queue = &bot.queue;
+    if let Err(message) = check_target(&url).await {
+        log::warn(
+            "Odrzucono adres /ytdlp",
+            Some(json!({ "reason": message, "chatId": ctx.chat_id(), "userId": ctx.sender_id() })),
+        );
+        reply_global(bot, ctx, &format!("⚠️ {message}"), Value::Null).await?;
+        return Ok(());
+    }
+    // Before the size probe: a refused job must not cost a yt-dlp run.
+    if let Err(error) = queue.check_capacity(ctx.sender_id()) {
+        log::warn(
+            "Nie udało się dodać /ytdlp do kolejki",
+            Some(
+                json!({ "error": format!("{error:?}"), "chatId": ctx.chat_id(), "userId": ctx.sender_id() }),
+            ),
+        );
+        reply_global(bot, ctx, &refused_text(queue, error), Value::Null).await?;
+        return Ok(());
+    }
     let first = if bot.settings.size_probe {
         "🔎 Sprawdzam rozmiar materiału…"
     } else {
@@ -1652,17 +1694,12 @@ async fn enqueue(bot: &Arc<Bot>, ctx: &Ctx, url: String, requested_at: Instant) 
         status_message_id: status["message_id"].as_i64(),
     }) {
         Ok(job) => job,
-        Err(()) => {
+        Err(error) => {
             log::warn(
                 "Nie udało się dodać /ytdlp do kolejki",
-                Some(json!({ "error": "QUEUE_FULL", "chatId": ctx.chat_id() })),
+                Some(json!({ "error": format!("{error:?}"), "chatId": ctx.chat_id() })),
             );
-            updater
-                .set(format!(
-                    "⚠️ Twoja kolejka jest pełna (maksymalnie {} oczekujących zadań). Spróbuj ponownie później.",
-                    queue.max_pending
-                ))
-                .await;
+            updater.set(refused_text(queue, error)).await;
             return Ok(());
         }
     };
