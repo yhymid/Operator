@@ -18,12 +18,37 @@ impl FullLogs {
         let Some(guild_id) = update.guild_id else {
             return Ok(());
         };
-        let Before::Message(Some(old)) = before else {
-            return Ok(());
-        };
         if update.author.id == app.bot_id {
             return Ok(());
         }
+        let Before::Message(old) = before else {
+            return Ok(());
+        };
+        let Some(old) = old else {
+            // Sent before the bot cached it: log the new text without a "before". Embed
+            // unfurls also arrive as updates; only real edits carry `edited_timestamp`.
+            if update.edited_timestamp.is_none() {
+                return Ok(());
+            }
+            let after_text = block(&update.content, MAX_DETAIL_VALUE_LENGTH);
+            self.log(app, guild_id, json!({
+                "category": "message",
+                "action": "edit",
+                "actor": actor_payload(Some(&update.author)),
+                "target": { "kind": "message", "id": update.id.to_string() },
+                "location": { "channelId": update.channel_id.to_string(), "channelName": channel_name(Some(update.channel_id)) },
+                "summary": "Message edited (the earlier text was not cached).",
+                "details": [format!("message_id={}", update.id)],
+                "metadata": {
+                    "messageId": update.id.to_string(),
+                    "channelId": update.channel_id.to_string(),
+                    "after": after_text,
+                    "uncached": true,
+                    "contentChanged": true
+                }
+            }), false);
+            return Ok(());
+        };
         let before_text = block(&old.content, MAX_DETAIL_VALUE_LENGTH);
         let after_text = block(&update.content, MAX_DETAIL_VALUE_LENGTH);
         let changed = before_text != after_text;
@@ -75,7 +100,26 @@ impl FullLogs {
         let Some(guild_id) = delete.guild_id else {
             return Ok(());
         };
-        let Before::Message(Some(old)) = before else {
+        let Before::Message(old) = before else {
+            return Ok(());
+        };
+        let Some(old) = old else {
+            // Not in the message cache (sent before the bot started or long ago): Discord only
+            // sends the IDs, so the content and author are unknown.
+            self.log(app, guild_id, json!({
+                "category": "message",
+                "action": "delete",
+                "actor": null,
+                "target": { "kind": "message", "id": delete.id.to_string() },
+                "location": { "channelId": delete.channel_id.to_string(), "channelName": channel_name(Some(delete.channel_id)) },
+                "summary": "Message deleted (not cached: content and author unknown).",
+                "details": [format!("message_id={}", delete.id)],
+                "metadata": {
+                    "messageId": delete.id.to_string(),
+                    "channelId": delete.channel_id.to_string(),
+                    "uncached": true
+                }
+            }), false);
             return Ok(());
         };
         if old.author_id == app.bot_id {
@@ -154,7 +198,8 @@ impl FullLogs {
                 "kind": "message",
                 "id": delete.id.to_string(),
                 "ownerId": old.author_id.to_string(),
-                "ownerTag": author_tag
+                "ownerTag": author_tag,
+                "avatar": author.as_ref().map(card::avatar_url)
             },
             "location": { "channelId": channel_id.to_string(), "channelName": channel_name(Some(channel_id)) },
             "summary": match &deleter {

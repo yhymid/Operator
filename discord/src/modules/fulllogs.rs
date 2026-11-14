@@ -28,6 +28,7 @@ use crate::discord::{self, FLAG_COMPONENTS_V2, FLAG_EPHEMERAL};
 use crate::util::text::{block, inline, is_snowflake, truncate};
 use operator_common::time::{now_iso, parse_iso};
 
+mod card;
 mod events;
 
 const AUDIT_CACHE_TTL: Duration = Duration::from_millis(1500);
@@ -37,7 +38,6 @@ const WRITE_BATCH_DELAY: Duration = Duration::from_millis(25);
 const AUDIT_FETCH_LIMIT: u16 = 10;
 const MAX_SUMMARY_LENGTH: usize = 260;
 const MAX_DETAIL_VALUE_LENGTH: usize = 320;
-const MAX_TEXT_DISPLAY_LENGTH: usize = 1700;
 const MAX_DETAIL_LINES: usize = 12;
 
 pub const CATEGORIES: [(&str, &str, &str); 17] = [
@@ -137,31 +137,6 @@ pub fn is_valid_day_key(value: &str) -> bool {
 // Rendering helpers (pure, mirror the JS functions of the same names)
 // ---------------------------------------------------------------------------------------------
 
-fn as_at_user(tag: Option<&str>) -> String {
-    let raw = inline(tag.unwrap_or_default(), 64);
-    if raw.is_empty() {
-        "@unknown".to_owned()
-    } else if raw.starts_with('@') {
-        raw
-    } else {
-        format!("@{raw}")
-    }
-}
-
-fn format_role_ref(name: Option<&str>) -> String {
-    match name {
-        None => "@role".to_owned(),
-        Some(name) => {
-            let raw = inline(name, 64);
-            if raw.starts_with('@') {
-                raw
-            } else {
-                format!("@{raw}")
-            }
-        }
-    }
-}
-
 fn simplify_channel_name(name: Option<&str>) -> String {
     let mut raw = inline(name.unwrap_or_default(), 64);
     if raw.is_empty() {
@@ -186,36 +161,11 @@ fn simplify_channel_name(name: Option<&str>) -> String {
     }
 }
 
-fn format_channel_ref(name: Option<&str>) -> String {
-    format!("#{}", simplify_channel_name(name).trim_start_matches('#'))
-}
-
 fn str_field<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value
         .get(key)
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
-}
-
-fn mention_user(id: Option<&str>, tag: Option<&str>) -> String {
-    match id.map(str::trim) {
-        Some(id) if is_snowflake(id, 15) => format!("<@{id}>"),
-        _ => as_at_user(tag),
-    }
-}
-
-fn mention_role(id: Option<&str>, name: Option<&str>) -> String {
-    match id.map(str::trim) {
-        Some(id) if is_snowflake(id, 15) => format!("<@&{id}>"),
-        _ => format_role_ref(name),
-    }
-}
-
-fn mention_channel(id: Option<&str>, name: Option<&str>) -> String {
-    match id.map(str::trim) {
-        Some(id) if is_snowflake(id, 15) => format!("<#{id}>"),
-        _ => format_channel_ref(name),
-    }
 }
 
 fn has_known_actor(actor: &Value) -> bool {
@@ -224,86 +174,6 @@ fn has_known_actor(actor: &Value) -> bool {
     }
     str_field(actor, "id").is_some_and(|id| is_snowflake(id, 15))
         || !inline(str_field(actor, "tag").unwrap_or_default(), 80).is_empty()
-}
-
-fn format_actor_mention(actor: &Value) -> String {
-    if !has_known_actor(actor) {
-        return "unknown".to_owned();
-    }
-    mention_user(str_field(actor, "id"), str_field(actor, "tag"))
-}
-
-fn strip_snowflakes(value: &str) -> String {
-    static PAREN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    static BARE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let paren = PAREN.get_or_init(|| regex::Regex::new(r"\(\d{15,22}\)").expect("static regex"));
-    let bare = BARE.get_or_init(|| regex::Regex::new(r"\b\d{15,22}\b").expect("static regex"));
-    let stripped = paren.replace_all(value, "");
-    let stripped = bare.replace_all(&stripped, "");
-    crate::util::text::compact_whitespace(&stripped)
-}
-
-fn sanitize_detail_line(input: &str) -> Option<String> {
-    let line = inline(input, 500);
-    if line.is_empty() {
-        return None;
-    }
-    static KV: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let kv =
-        KV.get_or_init(|| regex::Regex::new(r"(?i)^([a-z0-9_]+)=(.+)$").expect("static regex"));
-    if let Some(captures) = kv.captures(&line) {
-        let key = captures[1].to_lowercase();
-        if key == "id"
-            || key.ends_with("_id")
-            || key == "content"
-            || key == "before"
-            || key == "after"
-        {
-            return None;
-        }
-        let human = strip_snowflakes(&captures[2]);
-        if human.is_empty() {
-            return None;
-        }
-        return Some(truncate(&format!("{key}={human}"), 130));
-    }
-    let stripped = strip_snowflakes(&line);
-    (!stripped.is_empty()).then(|| truncate(&stripped, 130))
-}
-
-fn format_action_label(action: &str) -> String {
-    let raw = action.trim().to_lowercase();
-    if raw.is_empty() {
-        return "event".to_owned();
-    }
-    if raw == "state_update" || raw == "update" || raw.ends_with("_update") {
-        return "changed".to_owned();
-    }
-    match raw.as_str() {
-        "entry_create" => "recorded".to_owned(),
-        "slash_execute" => "executed".to_owned(),
-        "ban_add" => "ban".to_owned(),
-        "ban_remove" => "unban".to_owned(),
-        _ => {
-            let label = inline(&raw.replace('_', " "), 48);
-            if label.is_empty() {
-                "event".to_owned()
-            } else {
-                label
-            }
-        }
-    }
-}
-
-fn detail_suffix(details: &Value) -> String {
-    details
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .find_map(sanitize_detail_line)
-        .map(|first| format!(" ({})", truncate(&first, 78)))
-        .unwrap_or_default()
 }
 
 fn serialize_attachment_line(attachment: &Value) -> Option<String> {
@@ -329,198 +199,6 @@ fn serialize_attachment_line(attachment: &Value) -> Option<String> {
     }
 }
 
-fn build_message_delete_detail(entry: &Value) -> String {
-    let target = &entry["target"];
-    let metadata = &entry["metadata"];
-    let owner = mention_user(
-        str_field(target, "ownerId").or_else(|| str_field(metadata, "ownerId")),
-        str_field(target, "ownerTag"),
-    );
-    let content = inline(str_field(metadata, "content").unwrap_or_default(), 320);
-    let content = if content.is_empty() {
-        "[empty]".to_owned()
-    } else {
-        content
-    };
-    let reason = inline(str_field(metadata, "reason").unwrap_or_default(), 180).replace('"', "'");
-    let files: Vec<String> = metadata["attachments"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(serialize_attachment_line)
-        .collect();
-    let mut parts = vec![
-        format!("author={owner}"),
-        format!("content=\"{}\"", content.replace('"', "'")),
-    ];
-    if !files.is_empty() {
-        parts.push(format!("files={}", truncate(&files.join(", "), 520)));
-    }
-    if !reason.is_empty() {
-        parts.push(format!("reason=\"{reason}\""));
-    }
-    truncate(&parts.join("; "), 980)
-}
-
-pub fn build_compact_log_line(entry: &Value, icon: &str) -> String {
-    let actor_value = &entry["actor"];
-    let actor = format_actor_mention(actor_value);
-    let known = has_known_actor(actor_value);
-    let target = &entry["target"];
-    let location = &entry["location"];
-    let metadata = &entry["metadata"];
-    let category = str_field(entry, "category")
-        .unwrap_or_default()
-        .to_lowercase();
-    let action = str_field(entry, "action")
-        .unwrap_or_default()
-        .to_lowercase();
-    let suffix = detail_suffix(&entry["details"]);
-    let location_channel = || {
-        mention_channel(
-            str_field(location, "channelId"),
-            str_field(location, "channelName"),
-        )
-    };
-
-    match category.as_str() {
-        "voice" => {
-            let from = mention_channel(str_field(metadata, "beforeChannel"), None);
-            let to = mention_channel(
-                str_field(metadata, "afterChannel").or_else(|| str_field(location, "channelId")),
-                str_field(location, "channelName"),
-            );
-            match action.as_str() {
-                "join" => format!("{icon} {actor} joined to {to}"),
-                "leave" => format!("{icon} {actor} left from {from}"),
-                "move" => {
-                    let member = mention_user(
-                        str_field(target, "id").or_else(|| str_field(metadata, "userId")),
-                        str_field(target, "tag"),
-                    );
-                    if known {
-                        format!("{icon} {actor} moved {member} from {from} to {to}")
-                    } else {
-                        format!("{icon} {member} moved from {from} to {to} (actor unknown)")
-                    }
-                }
-                _ => {
-                    let at = location_channel();
-                    if known {
-                        format!("{icon} {actor} updated voice in {at}{suffix}")
-                    } else {
-                        format!("{icon} voice updated in {at} (actor unknown){suffix}")
-                    }
-                }
-            }
-        }
-        "role" => {
-            let role = mention_role(str_field(target, "id"), str_field(target, "name"));
-            match (action.as_str(), known) {
-                ("create", true) => format!("{icon} {actor} created {role}"),
-                ("create", false) => format!("{icon} created {role} (actor unknown)"),
-                ("delete", true) => format!("{icon} {actor} deleted {role}"),
-                ("delete", false) => format!("{icon} deleted {role} (actor unknown)"),
-                (_, true) => format!("{icon} {actor} updated {role}{suffix}"),
-                (_, false) => format!("{icon} updated {role} (actor unknown){suffix}"),
-            }
-        }
-        "command" => {
-            let name = str_field(target, "name").map_or("/unknown".to_owned(), |n| format!("/{n}"));
-            format!("{icon} {actor} executed {name} in {}", location_channel())
-        }
-        "message" => {
-            let at = location_channel();
-            match action.as_str() {
-                "delete" => {
-                    let detail = build_message_delete_detail(entry);
-                    if known {
-                        format!("{icon} {actor} deleted message in {at} ({detail})")
-                    } else {
-                        format!("{icon} deleted message in {at} (actor=unknown; {detail})")
-                    }
-                }
-                "bulk_delete" if known => format!("{icon} {actor} bulk-deleted messages in {at}"),
-                "bulk_delete" => format!("{icon} bulk-deleted messages in {at} (actor unknown)"),
-                "edit" | "update" => format!("{icon} {actor} edited message in {at}"),
-                _ => format!("{icon} {actor} updated message in {at}"),
-            }
-        }
-        "member" => {
-            let member = mention_user(str_field(target, "id"), str_field(target, "tag"));
-            match (action.as_str(), known) {
-                ("join", _) => format!("{icon} {member} joined server"),
-                ("leave", _) => format!("{icon} {member} left server"),
-                ("remove", _) => {
-                    format!("{icon} {member} left or was removed from server (actor unknown)")
-                }
-                ("kick", true) => format!("{icon} {member} was kicked by {actor}"),
-                ("kick", false) => format!("{icon} {member} was kicked (actor unknown)"),
-                ("ban", true) => format!("{icon} {member} was banned by {actor}"),
-                ("ban", false) => format!("{icon} {member} was banned (actor unknown)"),
-                (_, true) => format!("{icon} {actor} updated {member}{suffix}"),
-                (_, false) => format!("{icon} updated {member} (actor unknown){suffix}"),
-            }
-        }
-        "moderation" if action == "ban_add" || action == "ban_remove" => {
-            let member = mention_user(str_field(target, "id"), str_field(target, "tag"));
-            let verb = if action == "ban_add" {
-                "banned"
-            } else {
-                "unbanned"
-            };
-            if known {
-                format!("{icon} {actor} {verb} {member}")
-            } else {
-                format!("{icon} {verb} {member} (actor unknown)")
-            }
-        }
-        "channel" => {
-            let channel = mention_channel(
-                str_field(target, "id").or_else(|| str_field(location, "channelId")),
-                str_field(target, "name").or_else(|| str_field(location, "channelName")),
-            );
-            match (action.as_str(), known) {
-                ("create", true) => format!("{icon} {actor} created {channel}"),
-                ("create", false) => format!("{icon} created {channel} (actor unknown)"),
-                ("delete", true) => format!("{icon} {actor} deleted {channel}"),
-                ("delete", false) => format!("{icon} deleted {channel} (actor unknown)"),
-                (_, true) => format!("{icon} {actor} updated {channel}{suffix}"),
-                (_, false) => format!("{icon} updated {channel} (actor unknown){suffix}"),
-            }
-        }
-        _ => {
-            let label = format_action_label(str_field(entry, "action").unwrap_or("event"));
-            if known {
-                format!("{icon} {actor} {label}{suffix}")
-            } else {
-                format!("{icon} {label} (actor unknown){suffix}")
-            }
-        }
-    }
-}
-
-fn v2_line_payload(entry: &Value, extra_flags: u64, header: Option<(&str, &str)>) -> Value {
-    let icon = str_field(entry, "category")
-        .and_then(category_meta)
-        .map_or("🧩", |(_, icon)| icon);
-    let line = truncate(
-        &build_compact_log_line(entry, icon),
-        MAX_TEXT_DISPLAY_LENGTH,
-    );
-    let mut components = Vec::new();
-    if let Some((title, note)) = header {
-        components.push(discord::text(title));
-        components.push(discord::text(note));
-    }
-    components.push(discord::text(line));
-    json!({
-        "flags": FLAG_COMPONENTS_V2 | extra_flags,
-        "allowed_mentions": { "parse": [] },
-        "components": [discord::container(components)]
-    })
-}
-
 fn format_state_delta(before: &str, after: &str) -> Option<String> {
     let before = inline(before, 80);
     let after = inline(after, 80);
@@ -544,7 +222,12 @@ fn delta_bool(before: bool, after: bool) -> Option<String> {
 fn actor_payload(user: Option<&User>) -> Value {
     match user {
         Some(user) => {
-            json!({ "id": user.id.to_string(), "tag": discord::user_tag(user), "bot": user.bot })
+            json!({
+                "id": user.id.to_string(),
+                "tag": discord::user_tag(user),
+                "bot": user.bot,
+                "avatar": card::avatar_url(user),
+            })
         }
         None => Value::Null,
     }
@@ -628,7 +311,8 @@ pub enum Before {
     Message(Option<CachedMessageLite>),
     Channel(Option<Box<Channel>>),
     Role(Option<Role>),
-    Member(Option<(Vec<String>, Option<String>)>),
+    /// (roles, nickname, timeout end in unix seconds)
+    Member(Option<(Vec<String>, Option<String>, Option<i64>)>),
     Guild(Option<GuildBefore>),
     Emojis(Vec<(String, String, bool)>),
     Stickers(Vec<(String, String, String, u8)>),
@@ -659,6 +343,7 @@ pub fn capture_before(cache: &DefaultInMemoryCache, event: &Event) -> Before {
                 (
                     m.roles().iter().map(ToString::to_string).collect(),
                     m.nick().map(str::to_owned),
+                    m.communication_disabled_until().map(|t| t.as_secs()),
                 )
             }))
         }
@@ -1087,7 +772,7 @@ impl FullLogs {
             let guild = guild_id.to_owned();
             tokio::spawn(async move {
                 while let Some((channel, entry)) = rx.recv().await {
-                    let payload = v2_line_payload(&entry, 0, None);
+                    let payload = card::card_payload(&entry, 0, None);
                     if let Err(error) = discord::send_message(&app, channel, &payload).await {
                         tracing::warn!("FullLogs delivery error ({guild}/{channel}): {error}");
                     }
@@ -1192,7 +877,7 @@ impl FullLogs {
                 "No saved entries. Showing a sample log format.".to_owned(),
             ),
         };
-        v2_line_payload(&entry, FLAG_EPHEMERAL, Some(("## Logs Preview", &note)))
+        card::card_payload(&entry, FLAG_EPHEMERAL, Some(("## Logs Preview", &note)))
     }
 
     /// Returns `(path, attachment name)` when the day file exists.
@@ -1505,42 +1190,6 @@ async fn append(path: &Path, payload: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn compact_lines_match_js_shapes() {
-        let entry = json!({
-            "category": "voice", "action": "join",
-            "actor": { "id": "123456789012345678", "tag": "kuba", "bot": false },
-            "location": { "channelId": "223456789012345678", "channelName": "Pogaduchy" },
-            "metadata": { "afterChannel": "223456789012345678" },
-            "details": []
-        });
-        assert_eq!(
-            build_compact_log_line(&entry, "🔊"),
-            "🔊 <@123456789012345678> joined to <#223456789012345678>"
-        );
-
-        let deleted = json!({
-            "category": "message", "action": "delete", "actor": null,
-            "target": { "ownerId": "123456789012345678" },
-            "location": { "channelId": "223456789012345678" },
-            "metadata": { "content": "hej \"tam\"", "attachments": [] },
-            "details": []
-        });
-        assert_eq!(
-            build_compact_log_line(&deleted, "💬"),
-            "💬 deleted message in <#223456789012345678> (actor=unknown; author=<@123456789012345678>; content=\"hej 'tam'\")"
-        );
-
-        let generic = json!({
-            "category": "system", "action": "test",
-            "actor": null, "details": ["source=preview 123456789012345678", "id=5"]
-        });
-        assert_eq!(
-            build_compact_log_line(&generic, "🧩"),
-            "🧩 test (actor unknown) (source=preview)"
-        );
-    }
 
     #[test]
     fn helpers() {

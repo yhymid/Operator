@@ -21,7 +21,7 @@ impl FullLogs {
             "category": "member",
             "action": "join",
             "actor": actor_payload(Some(user)),
-            "target": { "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(user) },
+            "target": { "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(user), "avatar": card::avatar_url(user) },
             "summary": "Member joined the server.",
             "details": [
                 format!("account_created=<t:{created}:F>"),
@@ -100,7 +100,7 @@ impl FullLogs {
             "category": "member",
             "action": action,
             "actor": actor_payload(actor.as_ref()),
-            "target": { "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(user) },
+            "target": { "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(user), "avatar": card::avatar_url(user) },
             "summary": summary,
             "details": details,
             "metadata": {
@@ -123,9 +123,59 @@ impl FullLogs {
         let Event::MemberUpdate(update) = event else {
             return Ok(());
         };
-        let Before::Member(Some((old_roles, old_nick))) = before else {
+        let Before::Member(Some((old_roles, old_nick, old_timeout))) = before else {
             return Ok(());
         };
+        let user = &update.user;
+        let target = json!({ "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(user), "avatar": card::avatar_url(user) });
+
+        // Timeouts are a moderation action of their own (Quark/Dyno log them separately).
+        let now = chrono::Utc::now().timestamp();
+        let new_timeout = update
+            .communication_disabled_until
+            .map(|t| t.as_secs())
+            .filter(|until| *until > now);
+        let old_timeout = old_timeout.filter(|until| *until > now);
+        if new_timeout != old_timeout {
+            let audit = self
+                .resolve_audit(
+                    app,
+                    update.guild_id,
+                    AuditLogEventType::MemberUpdate,
+                    Some(user.id.get()),
+                    |_| true,
+                )
+                .await;
+            let reason = audit.entry.as_ref().and_then(|e| e.reason.clone());
+            let (action, summary) = match new_timeout {
+                Some(_) => ("timeout", "Member timed out."),
+                None => ("timeout_remove", "Timeout removed."),
+            };
+            let details: Vec<String> = new_timeout
+                .map(|until| format!("until=<t:{until}:F> (<t:{until}:R>)"))
+                .into_iter()
+                .collect();
+            self.log(
+                app,
+                update.guild_id,
+                json!({
+                    "category": "moderation",
+                    "action": action,
+                    "actor": actor_payload(audit.executor.as_ref()),
+                    "target": target,
+                    "summary": summary,
+                    "details": details,
+                    "metadata": {
+                        "userId": user.id.to_string(),
+                        "until": new_timeout,
+                        "reason": reason,
+                        "actorResolution": actor_resolution(audit.status)
+                    }
+                }),
+                false,
+            );
+        }
+
         let nick_delta = format_state_delta(
             old_nick.as_deref().unwrap_or_default(),
             update.nick.as_deref().unwrap_or_default(),
@@ -142,48 +192,66 @@ impl FullLogs {
         if nick_delta.is_none() && added.is_empty() && removed.is_empty() {
             return Ok(());
         }
-        let role_name = |id: &String| {
-            discord::parse_id(id).and_then(|rid| app.cache.role(rid).map(|r| r.name.clone()))
+        let roles_text = |ids: &[&String]| {
+            ids.iter()
+                .map(|r| format!("<@&{r}>"))
+                .collect::<Vec<_>>()
+                .join(", ")
         };
         let mut details = Vec::new();
         if let Some(delta) = &nick_delta {
             details.push(format!("nickname={delta}"));
         }
         if !added.is_empty() {
-            details.push(format!(
-                "roles_added={}",
-                added
-                    .iter()
-                    .map(|r| format_role_ref(role_name(r).as_deref()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
+            details.push(format!("roles_added={}", roles_text(&added)));
         }
         if !removed.is_empty() {
-            details.push(format!(
-                "roles_removed={}",
-                removed
-                    .iter()
-                    .map(|r| format_role_ref(role_name(r).as_deref()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
+            details.push(format!("roles_removed={}", roles_text(&removed)));
         }
-        let user = &update.user;
-        self.log(app, update.guild_id, json!({
-            "category": "member",
-            "action": "update",
-            "actor": actor_payload(Some(user)),
-            "target": { "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(user) },
-            "summary": "Member profile/roles updated.",
-            "details": details,
-            "metadata": {
-                "userId": user.id.to_string(),
-                "nicknameDelta": nick_delta,
-                "addedRoles": added,
-                "removedRoles": removed
-            }
-        }), false);
+        // Who changed it: roles come from the audit log; a nickname may be the member's own.
+        let roles_changed = !added.is_empty() || !removed.is_empty();
+        let audit = self
+            .resolve_audit(
+                app,
+                update.guild_id,
+                if roles_changed {
+                    AuditLogEventType::MemberRoleUpdate
+                } else {
+                    AuditLogEventType::MemberUpdate
+                },
+                Some(user.id.get()),
+                |_| true,
+            )
+            .await;
+        let actor = audit.executor.clone().or_else(|| {
+            // Without an audit entry only a nickname change can be attributed to the member.
+            (!roles_changed).then(|| user.clone())
+        });
+        let summary = match (roles_changed, nick_delta.is_some()) {
+            (true, true) => "Member roles and nickname updated.",
+            (true, false) => "Member roles updated.",
+            _ => "Member nickname updated.",
+        };
+        self.log(
+            app,
+            update.guild_id,
+            json!({
+                "category": "member",
+                "action": if roles_changed { "roles_update" } else { "nickname_update" },
+                "actor": actor_payload(actor.as_ref()),
+                "target": target,
+                "summary": summary,
+                "details": details,
+                "metadata": {
+                    "userId": user.id.to_string(),
+                    "nicknameDelta": nick_delta,
+                    "addedRoles": added,
+                    "removedRoles": removed,
+                    "actorResolution": actor_resolution(audit.status)
+                }
+            }),
+            false,
+        );
         Ok(())
     }
 

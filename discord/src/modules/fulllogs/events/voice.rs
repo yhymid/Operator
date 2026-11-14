@@ -115,7 +115,7 @@ impl FullLogs {
             "category": "voice",
             "action": action,
             "actor": actor,
-            "target": { "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(&user) },
+            "target": { "kind": "member", "id": user.id.to_string(), "tag": discord::user_tag(&user), "avatar": card::avatar_url(&user) },
             "location": {
                 "channelId": new_channel.or(old_channel).map(|c| c.to_string()),
                 "channelName": location_name
