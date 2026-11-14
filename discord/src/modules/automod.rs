@@ -40,6 +40,38 @@ fn normalize_content(value: &str) -> String {
     crate::util::text::compact_whitespace(&value.to_lowercase())
 }
 
+/// `normalize_content` plus folding of evasions: diacritics and other Latin accents are removed
+/// (`kurwą` → `kurwa`, `é` → `e`), zero-width characters dropped and digits used as letters
+/// mapped back (`k0t` → `kot`). Used as a second pass, so the original matching still applies.
+fn fold_content(value: &str) -> String {
+    let folded: String = normalize_content(value)
+        .chars()
+        .filter(|c| {
+            !matches!(
+                c,
+                '\u{200b}' | '\u{200c}' | '\u{200d}' | '\u{2060}' | '\u{feff}' | '\u{ad}'
+            )
+        })
+        .map(|c| match c {
+            'ą' | 'á' | 'à' | 'â' | 'ä' | 'ã' | 'å' | '4' => 'a',
+            'ć' | 'č' | 'ç' => 'c',
+            'ę' | 'é' | 'è' | 'ê' | 'ë' | 'ě' | '3' => 'e',
+            'í' | 'ì' | 'î' | 'ï' | '1' => 'i',
+            'ł' => 'l',
+            'ń' | 'ñ' | 'ň' => 'n',
+            'ó' | 'ò' | 'ô' | 'ö' | 'õ' | '0' => 'o',
+            'ś' | 'š' | '5' => 's',
+            'ź' | 'ż' | 'ž' => 'z',
+            'ú' | 'ù' | 'û' | 'ü' | 'ů' => 'u',
+            'ý' | 'ÿ' => 'y',
+            'ř' => 'r',
+            '7' => 't',
+            other => other,
+        })
+        .collect();
+    folded
+}
+
 /// JS `\W` without the `u` flag is ASCII-only, so Polish letters count as non-word characters.
 const JS_NON_WORD: &str = "[^A-Za-z0-9_]";
 
@@ -210,6 +242,7 @@ impl AutoMod {
             return None;
         }
         let normalized = normalize_content(content);
+        let folded = fold_content(content);
 
         for word in config::string_list(rules, &["blockedWords"]) {
             let trimmed = word.trim();
@@ -220,12 +253,17 @@ impl AutoMod {
                 "(^|{JS_NON_WORD}){}({JS_NON_WORD}|$)",
                 jsregex::escape(&trimmed.to_lowercase())
             );
-            if self
-                .compiled(&pattern)
-                .ok()
-                .and_then(|re| re.is_match(&normalized).ok())
-                == Some(true)
-            {
+            let folded_pattern = format!(
+                "(^|{JS_NON_WORD}){}({JS_NON_WORD}|$)",
+                jsregex::escape(&fold_content(trimmed))
+            );
+            let hit = |pattern: &str, text: &str| {
+                self.compiled(pattern)
+                    .ok()
+                    .and_then(|re| re.is_match(text).ok())
+                    == Some(true)
+            };
+            if hit(&pattern, &normalized) || hit(&folded_pattern, &folded) {
                 return Some(Violation {
                     rule: "blocked_word",
                     details: format!("blocked word: {trimmed}"),
@@ -531,6 +569,19 @@ mod tests {
         assert!(am.detect(&rules, "kotek", 0, None).is_none());
         // JS \W treats Polish letters as non-word characters.
         assert!(am.detect(&rules, "kotą", 0, None).is_some());
+    }
+
+    #[test]
+    fn folded_pass_catches_accents_digits_and_zero_width() {
+        let am = automod(json!({ "blockedWords": ["kot", "żaba"] }));
+        let rules = am.cfg()["rules"].clone();
+        for evasion in ["k0t", "KÓT", "k\u{200b}ot", "zaba", "ŻABA!", "z4ba"] {
+            assert!(am.detect(&rules, evasion, 0, None).is_some(), "{evasion}");
+        }
+        // Folding must not glue words into a match.
+        assert!(am.detect(&rules, "kotek", 0, None).is_none());
+        assert!(am.detect(&rules, "k0tek", 0, None).is_none());
+        assert!(am.detect(&rules, "nic tu nie ma", 0, None).is_none());
     }
 
     #[test]
