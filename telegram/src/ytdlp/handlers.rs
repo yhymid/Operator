@@ -317,7 +317,17 @@ pub(super) async fn check_target(url: &str) -> Result<(), &'static str> {
     let parsed = url::Url::parse(url).map_err(|_| "Podaj poprawny adres URL.")?;
     let host = parsed.host_str().unwrap_or_default();
     let port = parsed.port_or_known_default().unwrap_or(443);
-    operator_common::net::ensure_public_host(host, port).await
+    operator_common::net::ensure_public_host(host, port)
+        .await
+        .map_err(|error| {
+            use operator_common::net::HostError;
+            match error {
+                HostError::Missing => "Brak hosta w adresie.",
+                HostError::Private => "Adresy lokalne i prywatne są niedozwolone.",
+                HostError::NotFound => "Nie znaleziono serwera pod tym adresem.",
+                HostError::LookupFailed => "Nie udało się sprawdzić adresu serwera.",
+            }
+        })
 }
 
 /// `enqueueYtdlp(ctx, url)`
