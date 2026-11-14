@@ -19,7 +19,7 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-operator-common.workspace = true
+operator-common = { workspace = true, features = ["media"] }
 
 chrono-tz = { version = "0.10.4", default-features = false, features = ["std"] }
 croner = "4.0.3"

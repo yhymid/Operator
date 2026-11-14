@@ -10,12 +10,12 @@ use std::process::Stdio;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::Value;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 
 use crate::discord::Ix;
 use operator_common::env;
+use operator_common::media::{Encode, VideoCodec, parse_probe, transcode_args};
 
 const MEDIA_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
@@ -32,13 +32,6 @@ const INTERACTION_BUDGET: Duration = Duration::from_secs(14 * 60);
 fn job_slot() -> &'static tokio::sync::Semaphore {
     static SLOT: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
     SLOT.get_or_init(|| tokio::sync::Semaphore::new(1))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum VideoCodec {
-    H264,
-    Av1,
-    Source,
 }
 
 struct Settings {
@@ -59,14 +52,7 @@ struct Settings {
 
 impl Settings {
     fn from_env() -> Self {
-        let codec = match env::var("YTDLP_VIDEO_CODEC")
-            .map(|v| v.to_ascii_lowercase())
-            .as_deref()
-        {
-            Some("h264" | "avc") => VideoCodec::H264,
-            Some("source" | "copy" | "original") => VideoCodec::Source,
-            _ => VideoCodec::Av1,
-        };
+        let codec = VideoCodec::parse(env::var("YTDLP_VIDEO_CODEC").as_deref(), VideoCodec::Av1);
         let max_upload_bytes = env::var("YTDLP_MAX_UPLOAD_BYTES")
             .and_then(|v| v.parse::<f64>().ok())
             .filter(|v| v.is_finite() && *v > 0.0)
@@ -235,99 +221,6 @@ async fn find_downloaded_file(directory: &Path) -> Option<PathBuf> {
 // Codec compatibility
 // ---------------------------------------------------------------------------------------------
 
-#[derive(Debug, Default, PartialEq)]
-struct StreamInfo {
-    video: Option<String>,
-    pix_fmt: Option<String>,
-    audio: Option<String>,
-}
-
-fn parse_probe(output: &str) -> StreamInfo {
-    let value: Value = serde_json::from_str(output).unwrap_or(Value::Null);
-    let mut info = StreamInfo::default();
-    for stream in value["streams"].as_array().into_iter().flatten() {
-        let name = stream["codec_name"].as_str().map(str::to_owned);
-        match stream["codec_type"].as_str() {
-            Some("video") if info.video.is_none() => {
-                info.video = name;
-                info.pix_fmt = stream["pix_fmt"].as_str().map(str::to_owned);
-            }
-            Some("audio") if info.audio.is_none() => info.audio = name,
-            _ => {}
-        }
-    }
-    info
-}
-
-/// ffmpeg arguments producing an inline-playable MP4; returns whether video is re-encoded.
-fn transcode_args(
-    info: &StreamInfo,
-    codec: VideoCodec,
-    crf: Option<u32>,
-    av1_preset: u8,
-    input: &Path,
-    output: &Path,
-) -> (Vec<String>, bool) {
-    let eight_bit = matches!(info.pix_fmt.as_deref(), Some("yuv420p" | "yuvj420p"));
-    let video_ok = match codec {
-        VideoCodec::H264 => info.video.as_deref() == Some("h264") && eight_bit,
-        VideoCodec::Av1 => info.video.as_deref() == Some("av1") && eight_bit,
-        VideoCodec::Source => true,
-    };
-    let audio_ok = codec == VideoCodec::Source
-        || info.audio.is_none()
-        || matches!(info.audio.as_deref(), Some("aac" | "mp3"));
-    let mut args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-i"]
-        .map(str::to_owned)
-        .to_vec();
-    args.push(input.to_string_lossy().into_owned());
-    args.extend(["-map", "0:v:0", "-map", "0:a:0?"].map(str::to_owned));
-    if video_ok {
-        args.extend(["-c:v", "copy"].map(str::to_owned));
-    } else if codec == VideoCodec::Av1 {
-        let crf = crf.unwrap_or(30).to_string();
-        let preset = av1_preset.to_string();
-        args.extend(
-            [
-                "-c:v",
-                "libsvtav1",
-                "-preset",
-                &preset,
-                "-crf",
-                &crf,
-                "-pix_fmt",
-                "yuv420p",
-            ]
-            .map(str::to_owned),
-        );
-    } else {
-        let crf = crf.unwrap_or(18).to_string();
-        args.extend(
-            [
-                "-c:v",
-                "libx264",
-                "-preset",
-                "slow",
-                "-crf",
-                &crf,
-                "-profile:v",
-                "high",
-                "-pix_fmt",
-                "yuv420p",
-            ]
-            .map(str::to_owned),
-        );
-    }
-    if audio_ok {
-        args.extend(["-c:a", "copy"].map(str::to_owned));
-    } else {
-        args.extend(["-c:a", "aac", "-b:a", "192k"].map(str::to_owned));
-    }
-    args.extend(["-movflags", "+faststart"].map(str::to_owned));
-    args.push(output.to_string_lossy().into_owned());
-    (args, !video_ok)
-}
-
 /// Re-encodes HEVC/VP9/10-bit (Discord shows a frozen picture for HEVC) and remuxes for fast start.
 async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> {
     if settings.codec == VideoCodec::Source {
@@ -363,14 +256,12 @@ async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> 
         return Ok(path.to_owned());
     }
     let output = path.with_file_name("delivery.mp4");
-    let (args, reencode) = transcode_args(
-        &info,
-        settings.codec,
-        settings.crf,
-        settings.av1_preset,
-        path,
-        &output,
-    );
+    let encode = Encode {
+        codec: settings.codec,
+        crf: settings.crf,
+        av1_preset: settings.av1_preset,
+    };
+    let (args, reencode) = transcode_args(&info, encode, path, &output);
     tracing::info!(
         "ytdlp delivery video={:?} pix_fmt={:?} audio={:?} reencode={reencode}",
         info.video,
@@ -636,7 +527,7 @@ fn friendly_error(details: &str) -> String {
 
 /// Slash command definition (must match `commands.json`).
 #[cfg(test)]
-fn definition() -> Value {
+fn definition() -> serde_json::Value {
     serde_json::json!({
         "name": "ytdlp",
         "description": "Pobiera video z podanego adresu i wysyła je na kanał",
@@ -684,27 +575,9 @@ mod tests {
     }
 
     #[test]
-    fn transcode_decisions() {
-        let (p, o) = (Path::new("/t/video.mp4"), Path::new("/t/delivery.mp4"));
-        let hevc = parse_probe(
-            r#"{"streams":[{"codec_type":"video","codec_name":"hevc","pix_fmt":"yuv420p10le"},{"codec_type":"audio","codec_name":"opus"}]}"#,
-        );
-        let (args, reencode) = transcode_args(&hevc, VideoCodec::H264, None, 10, p, o);
-        assert!(reencode);
-        assert!(args.join(" ").contains("-c:v libx264 -preset slow -crf 18"));
-        assert!(args.join(" ").contains("-c:a aac -b:a 192k"));
-        let h264 = parse_probe(
-            r#"{"streams":[{"codec_type":"video","codec_name":"h264","pix_fmt":"yuv420p"},{"codec_type":"audio","codec_name":"aac"}]}"#,
-        );
-        assert!(!transcode_args(&h264, VideoCodec::H264, None, 10, p, o).1);
-        let (args, reencode) = transcode_args(&h264, VideoCodec::Av1, None, 10, p, o);
-        assert!(reencode);
-        assert!(args.join(" ").contains("-c:v libsvtav1 -preset 10 -crf 30"));
-    }
-
-    #[test]
     fn manifest_entry_matches() {
-        let manifest: Value = serde_json::from_str(include_str!("../../commands.json")).unwrap();
+        let manifest: serde_json::Value =
+            serde_json::from_str(include_str!("../../commands.json")).unwrap();
         let entry = manifest
             .as_array()
             .unwrap()
