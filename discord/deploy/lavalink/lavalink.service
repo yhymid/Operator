@@ -2,7 +2,7 @@
 Description=Lavalink v4 (Operator music)
 After=network-online.target
 Wants=network-online.target
-Before=operator.service
+Before=operator.service operator-discord.service
 
 [Service]
 Type=simple

@@ -100,8 +100,8 @@ mod tests {
     #[test]
     fn parses_mixed_separators() {
         let (ids, invalid) =
-            parse_input("780552865445969920, 752986566426624061;abc 780552865445969920");
-        assert_eq!(ids, vec!["780552865445969920", "752986566426624061"]);
+            parse_input("111111111111111111, 222222222222222222;abc 111111111111111111");
+        assert_eq!(ids, vec!["111111111111111111", "222222222222222222"]);
         assert_eq!(invalid, vec!["abc"]);
     }
 }

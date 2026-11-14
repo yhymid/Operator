@@ -13,6 +13,9 @@ ExecStart=/srv/operator/app/operator-discord
 Restart=always
 RestartSec=5
 KillSignal=SIGINT
+# SIGINT only to the bot; yt-dlp/ffmpeg children get SIGKILL only if still alive at the timeout.
+KillMode=mixed
+Nice=5
 TimeoutStopSec=20
 SyslogIdentifier=operator
 

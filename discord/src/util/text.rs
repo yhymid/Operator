@@ -52,7 +52,7 @@ mod tests {
         assert_eq!(truncate("  abc  ", 5), "abc");
         assert_eq!(truncate("abcdefghij", 6), "abc...");
         assert_eq!(inline("a \n\t b", 10), "a b");
-        assert!(is_snowflake("780552865445969920", 16));
+        assert!(is_snowflake("111111111111111111", 16));
         assert!(!is_snowflake("12345", 16));
     }
 }
