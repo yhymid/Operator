@@ -436,6 +436,16 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
             PlaySource::Attachment { .. } => "attachments",
         };
         tracing::info!("Music command play start guild={guild_id} user={user} source={source}");
+        // Lavalink's `http` source would fetch any URL, including local services.
+        if let PlaySource::Query(query) = &selection
+            && let Ok(parsed) = url::Url::parse(query)
+            && matches!(parsed.scheme(), "http" | "https")
+        {
+            let port = parsed.port_or_known_default().unwrap_or(443);
+            operator_common::net::ensure_public_host(parsed.host_str().unwrap_or_default(), port)
+                .await
+                .map_err(|message| anyhow::anyhow!(message))?;
+        }
         stage = "connect";
         let created = app.music.ensure_session(app, guild_id, voice).await?;
         let session = session.insert(created);

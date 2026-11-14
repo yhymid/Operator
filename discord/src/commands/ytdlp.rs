@@ -129,6 +129,14 @@ fn normalize_url(value: &str) -> Result<String, &'static str> {
     Ok(parsed.to_string())
 }
 
+/// Refuses links to local/private addresses (Lavalink, cloud metadata, LAN) before yt-dlp runs.
+async fn check_target(url: &str) -> Result<(), &'static str> {
+    let parsed = url::Url::parse(url).map_err(|_| "Podaj poprawny adres URL.")?;
+    let host = parsed.host_str().unwrap_or_default();
+    let port = parsed.port_or_known_default().unwrap_or(443);
+    operator_common::net::ensure_public_host(host, port).await
+}
+
 fn is_youtube(url: &str) -> bool {
     let host = url::Url::parse(url)
         .ok()
@@ -467,6 +475,12 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         Err(message) => return ix.reply_ephemeral(message).await,
     };
     ix.defer(false).await?;
+    if let Err(message) = check_target(&url).await {
+        tracing::warn!("ytdlp: odrzucono adres ({message})");
+        return ix
+            .edit_content(format!("Nie udało się pobrać video: {message}"))
+            .await;
+    }
     cleanup_expired_media().await;
     let settings = Settings::from_env();
     let suffix: String = (0..6)
