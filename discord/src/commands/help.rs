@@ -19,9 +19,10 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "`/music mode:pause|resume`",
             "`/music mode:volume value:<+10|-10|80>`",
             "`/music mode:remove position:<numer>`",
+            "`/music mode:move position:<skąd> to:<dokąd>`, `/music mode:seek time:<1:30>`",
             "`/music mode:clear|reconnect`",
             "Panel z przyciskami: loop, autoplay, shuffle, EQ/FX.",
-            "`/ytdlp url:<link>` - pobiera video i wysyła je na kanał",
+            "`/ytdlp url:<link>` - pobiera video i wysyła je na kanał (`audio:true` - sam dźwięk MP3)",
         ],
         "moderation" => &[
             "### Moderacja",

@@ -211,6 +211,10 @@
             "value": "remove"
           },
           {
+            "name": "move",
+            "value": "move"
+          },
+          {
             "name": "clear",
             "value": "clear"
           },
@@ -221,6 +225,10 @@
           {
             "name": "skip",
             "value": "skip"
+          },
+          {
+            "name": "seek",
+            "value": "seek"
           },
           {
             "name": "stop",
@@ -259,10 +267,22 @@
       {
         "type": 4,
         "name": "position",
-        "description": "Pozycja w kolejce dla mode=remove (1 = pierwszy po aktualnym)",
+        "description": "Pozycja w kolejce dla mode=remove/move (1 = pierwszy po aktualnym)",
         "required": false,
         "min_value": 1,
         "max_value": 500
+      },
+      {
+        "type": 4,
+        "name": "to",
+        "description": "Nowa pozycja dla mode=move",
+        "required": false
+      },
+      {
+        "type": 3,
+        "name": "time",
+        "description": "Czas dla mode=seek, np. 1:30 albo 90",
+        "required": false
       }
     ]
   },

@@ -21,6 +21,23 @@ fn audio_file_regex() -> &'static regex::Regex {
     })
 }
 
+/// `90`, `1:30` or `1:02:03` → milliseconds.
+pub fn parse_timestamp(raw: &str) -> Option<i64> {
+    let parts: Vec<&str> = raw.trim().split(':').collect();
+    if parts.is_empty() || parts.len() > 3 || parts.iter().any(|p| p.is_empty()) {
+        return None;
+    }
+    let mut seconds: i64 = 0;
+    for (index, part) in parts.iter().enumerate() {
+        let value: i64 = part.parse().ok().filter(|v| *v >= 0)?;
+        if index > 0 && value >= 60 {
+            return None;
+        }
+        seconds = seconds.checked_mul(60)?.checked_add(value)?;
+    }
+    seconds.checked_mul(1000)
+}
+
 pub fn format_duration(seconds: i64) -> String {
     if seconds <= 0 {
         return "?:??".to_owned();
@@ -747,6 +764,76 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 }
             }
         }
+        "seek" => {
+            let Some(s) = snapshot.filter(|s| s.current_track.is_some()) else {
+                return ix.reply_ephemeral("Nic nie gra.").await;
+            };
+            if let Some(error) = require_same_voice(ix, voice) {
+                return ix.reply_ephemeral(error).await;
+            }
+            let track = s.current_track.as_ref().expect("checked above");
+            if track.raw["info"]["isStream"] == json!(true)
+                || track.raw["info"]["isSeekable"] == json!(false)
+            {
+                return ix
+                    .reply_ephemeral("Tego utworu nie da się przewinąć.")
+                    .await;
+            }
+            let Some(position) = opts.string("time").as_deref().and_then(parse_timestamp) else {
+                return ix
+                    .reply_ephemeral("Dla mode=seek podaj `time`, np. `1:30` albo `90`.")
+                    .await;
+            };
+            match app.music.seek(guild_id, position).await? {
+                Some(next) => {
+                    ix.reply(json!({ "content": format!(
+                        "Przewinięto do {} / {}.",
+                        format_duration(next.position_sec),
+                        format_duration(track.duration_sec)
+                    ) }))
+                    .await
+                }
+                None => ix.reply_ephemeral("Nic nie gra.").await,
+            }
+        }
+        "move" => {
+            let Some(s) = snapshot else {
+                return no_session().await;
+            };
+            if let Some(error) = require_same_voice(ix, voice) {
+                return ix.reply_ephemeral(error).await;
+            }
+            let (Some(from), Some(to)) = (
+                opts.integer("position").filter(|p| *p > 0),
+                opts.integer("to").filter(|p| *p > 0),
+            ) else {
+                return ix
+                    .reply_ephemeral(
+                        "Dla mode=move podaj `position` (skąd) i `to` (dokąd), oba >= 1.",
+                    )
+                    .await;
+            };
+            let len = s.queue.len() as i64;
+            if from > len || to > len {
+                return ix
+                    .reply_ephemeral(format!("Kolejka ma teraz {len} pozycji."))
+                    .await;
+            }
+            match app
+                .music
+                .move_in_queue(guild_id, from as usize, to as usize)
+                .await
+            {
+                Some(track) => {
+                    ix.reply(json!({ "content": format!(
+                        "Przeniesiono z pozycji {from} na {to}: {}.",
+                        format_track_line(&track, None)
+                    ) }))
+                    .await
+                }
+                None => ix.reply_ephemeral("Nie udało się przenieść utworu.").await,
+            }
+        }
         "clear" => {
             let Some(s) = snapshot else {
                 return no_session().await;
@@ -958,6 +1045,16 @@ async fn handle_panel_action(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn timestamps() {
+        assert_eq!(parse_timestamp("90"), Some(90_000));
+        assert_eq!(parse_timestamp(" 1:30 "), Some(90_000));
+        assert_eq!(parse_timestamp("1:02:03"), Some(3_723_000));
+        for bad in ["", "1:", "1:60", "-5", "a:10", "1:2:3:4"] {
+            assert_eq!(parse_timestamp(bad), None, "{bad}");
+        }
+    }
 
     #[test]
     fn durations() {
