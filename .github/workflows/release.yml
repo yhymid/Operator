@@ -1,0 +1,62 @@
+name: Release
+
+# Push a tag on the matching branch to publish a binary:
+#   git tag discord-v1.2.0 discord && git push github discord-v1.2.0
+#   git tag telegram-v1.2.0 telegram && git push github telegram-v1.2.0
+on:
+  push:
+    tags:
+      - 'discord-v*'
+      - 'telegram-v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    # Ubuntu 22.04 links against glibc 2.35, so the binary also runs on newer servers
+    # (the VPS has 2.41).
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pick the bot from the tag
+        id: bot
+        run: |
+          case "$GITHUB_REF_NAME" in
+            discord-v*) echo "package=operator-discord" >> "$GITHUB_OUTPUT" ;;
+            telegram-v*) echo "package=operator-telegram" >> "$GITHUB_OUTPUT" ;;
+            *) echo "unexpected tag $GITHUB_REF_NAME" >&2; exit 1 ;;
+          esac
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Build
+        run: cargo build --release --locked -p "${{ steps.bot.outputs.package }}"
+
+      - name: Package
+        run: |
+          bin="${{ steps.bot.outputs.package }}"
+          out="$bin-$GITHUB_REF_NAME-x86_64-linux-gnu"
+          cp "target/release/$bin" "$out"
+          sha256sum "$out" > "$out.sha256"
+          echo "ASSET=$out" >> "$GITHUB_ENV"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256
+          generate_release_notes: true
