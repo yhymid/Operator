@@ -999,9 +999,69 @@ fn write_with_mode(path: &Path, contents: &[u8], mode: u32) -> std::io::Result<(
     file.write_all(contents)
 }
 
+/// Deletes player pages this bot published (`<32 hex>/` with `.delete-token`, or a leftover
+/// `<32 hex>.tmp/` staging dir) older than `ttl`. Anything else in the media dir is left alone:
+/// it is a public website directory shared with other content.
+pub async fn cleanup_expired_pages(media_root: &Path, ttl: Duration) {
+    let Some(cutoff) = std::time::SystemTime::now().checked_sub(ttl) else {
+        return;
+    };
+    let Ok(mut entries) = tokio::fs::read_dir(media_root).await else {
+        return;
+    };
+    let mut removed = 0usize;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let (id, staging) = match name.strip_suffix(".tmp") {
+            Some(id) => (id, true),
+            None => (name.as_str(), false),
+        };
+        if id.len() != 32
+            || !id
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            continue;
+        }
+        let path = entry.path();
+        // symlink_metadata: never follow a link out of the media dir.
+        let Ok(meta) = tokio::fs::symlink_metadata(&path).await else {
+            continue;
+        };
+        if !meta.is_dir() || meta.modified().map_or(true, |m| m > cutoff) {
+            continue;
+        }
+        if !staging
+            && !tokio::fs::try_exists(path.join(".delete-token"))
+                .await
+                .unwrap_or(false)
+        {
+            continue;
+        }
+        match tokio::fs::remove_dir_all(&path).await {
+            Ok(()) => removed += 1,
+            Err(error) => log::warn(
+                "Nie udało się usunąć wygasłej strony",
+                Some(json!({ "id": id, "error": error.to_string() })),
+            ),
+        }
+    }
+    if removed > 0 {
+        log::info(
+            "Usunięto wygasłe strony z plikami",
+            Some(json!({ "count": removed })),
+        );
+    }
+}
+
 /// `publishToWebsite(filePath)` → public player page URL.
 async fn publish_to_website(bot: &Bot, file_path: &Path) -> Result<String> {
     let media_root = bot.settings.website_root.join("media");
+    cleanup_expired_pages(
+        &media_root,
+        Duration::from_secs(bot.settings.website_ttl_hours.saturating_mul(3600)),
+    )
+    .await;
     let id = hex(&rand::random::<[u8; 16]>());
     let staging = media_root.join(format!("{id}.tmp"));
     let target = media_root.join(&id);
@@ -1086,23 +1146,16 @@ async fn reply_global(bot: &Bot, ctx: &Ctx, text: &str, extra: Value) -> Result<
     bot.reply(ctx, text, extra).await
 }
 
+/// Admins are matched by numeric user ID only: a username can be released and taken by someone else.
 fn is_admin(bot: &Bot, ctx: &Ctx) -> bool {
     let user_id = ctx.sender_id().map(|id| id.to_string()).unwrap_or_default();
-    let username = ctx
-        .sender_username()
-        .unwrap_or_default()
-        .trim_start_matches('@')
-        .to_lowercase();
-    let allowed = bot.settings.admin_ids.contains(&user_id)
-        || bot.settings.admin_usernames.contains(&username);
-    log::info(
-        "Sprawdzono uprawnienia administratora",
-        Some(json!({
-            "userId": user_id,
-            "username": if username.is_empty() { Value::Null } else { json!(username) },
-            "allowed": allowed,
-        })),
-    );
+    let allowed = !user_id.is_empty() && bot.settings.admin_ids.contains(&user_id);
+    if !allowed {
+        log::info(
+            "Odmówiono uprawnień administratora",
+            Some(json!({ "userId": user_id })),
+        );
+    }
     allowed
 }
 
@@ -1806,8 +1859,9 @@ async fn deliver(bot: &Arc<Bot>, job: &Arc<Job>, temp_dir: &mut Option<PathBuf>)
         job.set_status_text("Opublikowano na stronie");
         job.status
             .set(format!(
-                "✅ Plik ma {} i przekracza limit Telegrama.\n🌐 Player: {page}\n🗑️ Na stronie jest przycisk usuwania pliku.",
-                format_bytes(size)
+                "✅ Plik ma {} i przekracza limit Telegrama.\n🌐 Player: {page} (ważny {} h)\n🗑️ Na stronie jest przycisk usuwania pliku.",
+                format_bytes(size),
+                bot.settings.website_ttl_hours
             ))
             .await;
         return Ok(());
@@ -1961,6 +2015,38 @@ pub async fn configure_command_menu(bot: &Bot) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn expired_page_cleanup_only_touches_published_pages() {
+        let root = std::env::temp_dir().join(format!("op-tg-cleanup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let page = root.join("0123456789abcdef0123456789abcdef");
+        let staging = root.join("fedcba9876543210fedcba9876543210.tmp");
+        let no_token = root.join("00000000000000000000000000000000");
+        let foreign = root.join("UniwersumPanczkoweBuild1.4");
+        for dir in [&page, &staging, &no_token, &foreign] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(page.join(".delete-token"), "x\n").unwrap();
+        std::fs::write(page.join("video.mp4"), "v").unwrap();
+        std::fs::write(foreign.join(".delete-token"), "x\n").unwrap();
+        std::fs::write(root.join("index.html"), "site").unwrap();
+
+        // Fresh pages survive a 1 h TTL.
+        cleanup_expired_pages(&root, Duration::from_secs(3600)).await;
+        assert!(page.exists() && staging.exists());
+
+        cleanup_expired_pages(&root, Duration::ZERO).await;
+        assert!(!page.exists(), "published page must expire");
+        assert!(!staging.exists(), "leftover staging dir must expire");
+        assert!(
+            no_token.exists(),
+            "hex dir without .delete-token is not ours"
+        );
+        assert!(foreign.exists(), "other website content must stay");
+        assert!(root.join("index.html").exists());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn bytes_formatting() {

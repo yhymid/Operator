@@ -8,7 +8,7 @@ i wysylka w kodeku, ktory odtwarza sie w Telegramie i Discordzie. To jest glowna
 
 - `/ytdlp <URL>` - dodaje material do wspolnej kolejki (mniejsze pliki maja wyzszy priorytet)
 - `/ytdlp queue`, `/ytdlp status` - podglad kolejki z przyciskami
-- `/ytdlp_admin pause | resume | clear | cancel <pozycja>` - tylko `ADMIN_IDS` / `ADMIN_USERNAMES`
+- `/ytdlp_admin pause | resume | clear | cancel <pozycja>` - tylko `ADMIN_IDS`
 - linki YouTube Shorts / Instagram Reels / TikTok wyslane zwykla wiadomoscia sa pobierane automatycznie
 
 ## Struktura

@@ -95,6 +95,8 @@ pub struct Settings {
     pub progress_interval_ms: f64,
     pub website_root: PathBuf,
     pub public_base_url: String,
+    /// Published player pages older than this are deleted (`YTDLP_WEBSITE_TTL_HOURS`).
+    pub website_ttl_hours: u64,
     pub queue_concurrency: usize,
     pub queue_max_pending: usize,
     pub size_probe: bool,
@@ -105,7 +107,6 @@ pub struct Settings {
     pub ffprobe_path: String,
     pub max_message_age_secs: u64,
     pub admin_ids: HashSet<String>,
-    pub admin_usernames: HashSet<String>,
     pub chat_min_interval_ms: u64,
     pub rate_limit_retries: u64,
     pub rate_limit_jitter_ms: u64,
@@ -154,6 +155,7 @@ impl Settings {
             direct_url_first: not_disabled("TELEGRAM_DIRECT_URL_FIRST"),
             progress_interval_ms: number_or("YTDLP_PROGRESS_INTERVAL_MS", 2500.0),
             website_root,
+            website_ttl_hours: positive_env("YTDLP_WEBSITE_TTL_HOURS", 24),
             public_base_url: env_or("YTDLP_PUBLIC_BASE_URL", "https://bladephoriafonk.xyz")
                 .trim_end_matches('/')
                 .to_owned(),
@@ -171,9 +173,6 @@ impl Settings {
             max_message_age_secs: positive_env("YTDLP_MAX_MESSAGE_AGE_SECONDS", 10 * 60),
             admin_ids: split_list(&std::env::var("ADMIN_IDS").unwrap_or_default())
                 .map(str::to_owned)
-                .collect(),
-            admin_usernames: split_list(&std::env::var("ADMIN_USERNAMES").unwrap_or_default())
-                .map(|v| v.trim_start_matches('@').to_lowercase())
                 .collect(),
             chat_min_interval_ms: positive_env("TELEGRAM_CHAT_MIN_INTERVAL_MS", 3000),
             rate_limit_retries: positive_env("TELEGRAM_RATE_LIMIT_RETRIES", 5),

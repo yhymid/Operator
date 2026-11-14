@@ -86,6 +86,12 @@ async fn run() -> ExitCode {
         username: me["username"].as_str().unwrap_or_default().to_owned(),
     });
     queue.set_runner(ytdlp::runner(Arc::downgrade(&bot)));
+    if std::env::var("ADMIN_USERNAMES").is_ok_and(|v| !v.trim().is_empty()) {
+        log::warn(
+            "ADMIN_USERNAMES nie jest już obsługiwane - ustaw ADMIN_IDS (numeryczne ID użytkowników).",
+            Some(json!({ "adminIds": settings.admin_ids.len() })),
+        );
+    }
     log::info(
         "Zarejestrowano komendę /ytdlp",
         Some(json!({

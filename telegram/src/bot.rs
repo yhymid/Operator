@@ -61,10 +61,6 @@ impl Ctx {
         self.from()["id"].as_i64()
     }
 
-    pub fn sender_username(&self) -> Option<&str> {
-        self.from()["username"].as_str()
-    }
-
     pub fn text(&self) -> Option<&str> {
         self.message["text"].as_str()
     }
@@ -270,6 +266,5 @@ mod tests {
         let ctx = message("/start", 6);
         assert_eq!(ctx.thread_id(), Some(9));
         assert!(ctx.is_group());
-        assert_eq!(ctx.sender_username(), Some("Someone"));
     }
 }
