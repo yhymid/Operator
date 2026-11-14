@@ -125,6 +125,7 @@
     "name": "clean",
     "description": "Komendy czyszczenia",
     "dm_permission": false,
+    "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
@@ -156,6 +157,7 @@
     "name": "cache",
     "description": "Narzedzia cache",
     "dm_permission": false,
+    "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
@@ -490,6 +492,7 @@
     "name": "announce",
     "description": "Planowanie ogloszen przez webhook",
     "dm_permission": false,
+    "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
