@@ -1,5 +1,18 @@
 # Operator
 
+> **Galaz `rust/discord-rewrite`**: bot Discord przepisany na Rust - `crates/operator-discord`
+> (twilight 0.18 + wlasny klient Lavalink v4). Te same komendy, `config.json`, `.env` i pliki
+> stanu co wersja JS. Szczegoly i roznice: [docs/rust-discord.md](docs/rust-discord.md).
+>
+> ```bash
+> cargo build --release -p operator-discord
+> ./target/release/operator-discord doctor          # zamiast npm run doctor
+> ./target/release/operator-discord commands sync   # zamiast npm run commands:sync
+> ./target/release/operator-discord                 # zamiast npm start
+> ```
+>
+> Ponizej opis wersji JS, ktora zostaje w repo jako punkt odniesienia.
+
 Operator to bot Discord oparty o `discord.js`, przygotowany pod lokalne rozwijanie zmian i pozniejsze spokojne wdrozenie na VPS.
 
 ## Co potrafi
