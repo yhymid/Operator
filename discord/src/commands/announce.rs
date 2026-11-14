@@ -153,7 +153,7 @@ fn format_line_breaks(input: &str) -> String {
 fn normalize_required_content(value: &str) -> Result<String> {
     let raw = value.trim();
     if raw.is_empty() {
-        bail!("Treść announcement nie może być pusta.");
+        bail!("Announcement content cannot be empty.");
     }
     Ok(format_line_breaks(raw))
 }
@@ -172,7 +172,7 @@ fn list_embed(items: &[Value]) -> Value {
         "timestamp": now_iso(),
     });
     if items.is_empty() {
-        embed["description"] = json!("Brak ogłoszeń.");
+        embed["description"] = json!("No announcements.");
         return embed;
     }
     let fields: Vec<Value> = items
@@ -182,8 +182,11 @@ fn list_embed(items: &[Value]) -> Value {
             let status = item["status"].as_str().unwrap_or("undefined");
             let ids = item["messageIds"].as_array().map_or(0, Vec::len);
             let mut lines = vec![
-                format!("kanał: <#{}>", s(item, "channelId").unwrap_or("undefined")),
-                format!("czas: <t:{}:F>", run_at_ms(item).div_euclid(1000)),
+                format!(
+                    "channel: <#{}>",
+                    s(item, "channelId").unwrap_or("undefined")
+                ),
+                format!("time: <t:{}:F>", run_at_ms(item).div_euclid(1000)),
             ];
             if status != "sent"
                 && let Some(code) = s(item, "code")
@@ -203,12 +206,12 @@ fn list_embed(items: &[Value]) -> Value {
                     "message"
                 },
             );
-            lines.push(format!("tryb: {mode}"));
+            lines.push(format!("mode: {mode}"));
             for (key, label) in [
-                ("profileName", "profil"),
-                ("title", "tytul"),
+                ("profileName", "profile"),
+                ("title", "title"),
                 ("buttonLabel", "button"),
-                ("lastError", "blad"),
+                ("lastError", "error"),
             ] {
                 if let Some(v) = s(item, key) {
                     lines.push(if key == "profileName" {
@@ -242,7 +245,7 @@ fn profile_list_embed(profiles: &Map<String, Value>) -> Value {
         "timestamp": now_iso(),
     });
     if profiles.is_empty() {
-        embed["description"] = json!("Brak profili.");
+        embed["description"] = json!("No profiles.");
         return embed;
     }
     let fields: Vec<Value> = sorted_profile_names(profiles)
@@ -251,12 +254,12 @@ fn profile_list_embed(profiles: &Map<String, Value>) -> Value {
         .map(|name| {
             let profile = &profiles[&name];
             let mut lines = vec![format!(
-                "kanał: <#{}>",
+                "channel: <#{}>",
                 s(profile, "channelId").unwrap_or("undefined")
             )];
             for (key, label) in [
-                ("title", "tytul"),
-                ("color", "kolor"),
+                ("title", "title"),
+                ("color", "color"),
                 ("username", "username"),
                 ("avatarURL", "avatar"),
             ] {
@@ -343,14 +346,12 @@ pub async fn autocomplete(ix: &Ix<'_>) -> Result<()> {
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let Some(guild_id) = ix.guild_id() else {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("This command only works in a server.")
             .await;
     };
     let app = ix.app;
     if !app.is_owner(ix.user_id()) {
-        return ix
-            .reply_ephemeral("Ta komenda jest tylko dla ownera.")
-            .await;
+        return ix.reply_ephemeral("This command is owner-only.").await;
     }
     let guild = guild_id.to_string();
     // The sweep may be sending right now; wait briefly, but answer before Discord's 3 s limit.
@@ -361,7 +362,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     .await
     else {
         return ix
-            .reply_ephemeral("Trwa wysyłka zaplanowanych ogłoszeń. Spróbuj ponownie za chwilę.")
+            .reply_ephemeral("Scheduled announcements are being sent. Try again in a moment.")
             .await;
     };
     let opts = ix.opts();
@@ -381,7 +382,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         "profile_create" => {
             let Some(raw) = opts.string("name") else {
                 return ix
-                    .reply_ephemeral("Dla mode=profile_create podaj `name`.")
+                    .reply_ephemeral("For mode=profile_create, provide `name`.")
                     .await;
             };
             let name = match normalize_profile_name(Some(raw))? {
@@ -390,7 +391,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             };
             let Some((channel, _)) = opts.channel("channel") else {
                 return ix
-                    .reply_ephemeral("Dla mode=profile_create podaj `channel`.")
+                    .reply_ephemeral("For mode=profile_create, provide `channel`.")
                     .await;
             };
             let title = normalize_optional_text(opts.string("title"));
@@ -399,7 +400,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let avatar = normalize_optional_text(opts.string("avatar_url"));
             if current.profiles.contains_key(&name) {
                 return ix
-                    .reply_ephemeral("Profil o tej nazwie już istnieje.")
+                    .reply_ephemeral("A profile with this name already exists.")
                     .await;
             }
             let now = now_iso();
@@ -417,7 +418,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 }),
             );
             save_profiles(&current.profiles);
-            ix.reply_ephemeral(format!("Dodano profil `{name}` dla <#{channel}>."))
+            ix.reply_ephemeral(format!("Added profile `{name}` for <#{channel}>."))
                 .await
         }
         "profile_list" => {
@@ -427,7 +428,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         "profile_edit" => {
             let Some(raw) = opts.string("name") else {
                 return ix
-                    .reply_ephemeral("Dla mode=profile_edit podaj `name`.")
+                    .reply_ephemeral("For mode=profile_edit, provide `name`.")
                     .await;
             };
             let name = match normalize_profile_name(Some(raw))? {
@@ -436,7 +437,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             };
             let Some(profile) = current.profiles.get_mut(&name) else {
                 return ix
-                    .reply_ephemeral("Nie znaleziono profilu o tej nazwie.")
+                    .reply_ephemeral("No profile with this name was found.")
                     .await;
             };
             let next_title = normalize_optional_text(opts.string("title"));
@@ -460,20 +461,17 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 }
             }
             if changed.is_empty() {
-                return ix.reply_ephemeral("Nie podano żadnej zmiany.").await;
+                return ix.reply_ephemeral("No changes were given.").await;
             }
             profile["updatedAt"] = json!(now_iso());
             save_profiles(&current.profiles);
-            ix.reply_ephemeral(format!(
-                "Zmieniono profil `{name}`: {}.",
-                changed.join(", ")
-            ))
-            .await
+            ix.reply_ephemeral(format!("Updated profile `{name}`: {}.", changed.join(", ")))
+                .await
         }
         "profile_delete" => {
             let Some(raw) = opts.string("name") else {
                 return ix
-                    .reply_ephemeral("Dla mode=profile_delete podaj `name`.")
+                    .reply_ephemeral("For mode=profile_delete, provide `name`.")
                     .await;
             };
             let name = match normalize_profile_name(Some(raw))? {
@@ -482,11 +480,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             };
             if current.profiles.remove(&name).is_none() {
                 return ix
-                    .reply_ephemeral("Nie znaleziono profilu o tej nazwie.")
+                    .reply_ephemeral("No profile with this name was found.")
                     .await;
             }
             save_profiles(&current.profiles);
-            ix.reply_ephemeral(format!("Usunięto profil `{name}`."))
+            ix.reply_ephemeral(format!("Deleted profile `{name}`."))
                 .await
         }
         "create" | "now" => {
@@ -501,7 +499,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .cloned();
             if raw_profile.is_some() && profile.is_none() {
                 return ix
-                    .reply_ephemeral("Nie znaleziono profilu o tej nazwie.")
+                    .reply_ephemeral("No profile with this name was found.")
                     .await;
             }
             let profile_channel = profile
@@ -515,13 +513,13 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 });
             let Some(channel) = opts.channel("channel").map(|c| c.0).or(profile_channel) else {
                 return ix
-                    .reply_ephemeral("Podaj `channel` albo użyj profilu z ustawionym kanałem.")
+                    .reply_ephemeral("Provide `channel` or use a profile that has a channel set.")
                     .await;
             };
             let run_at = if mode == "create" {
                 let Some(input) = opts.string("datetime") else {
                     return ix
-                        .reply_ephemeral("Dla mode=create podaj `datetime`.")
+                        .reply_ephemeral("For mode=create, provide `datetime`.")
                         .await;
                 };
                 parse_datetime(&input)?
@@ -530,7 +528,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             };
             let Some(content_input) = opts.string("content") else {
                 return ix
-                    .reply_ephemeral(format!("Dla mode={mode} podaj `content`."))
+                    .reply_ephemeral(format!("For mode={mode}, provide `content`."))
                     .await;
             };
             let content = normalize_required_content(&content_input)?;
@@ -549,7 +547,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             };
             if send_mode == "components" && (!button_label.is_set() || !button_url.is_set()) {
                 return ix
-                    .reply_ephemeral("Tryb `components` wymaga `button_label` i `button_url`.")
+                    .reply_ephemeral("The `components` mode needs `button_label` and `button_url`.")
                     .await;
             }
             let now = now_iso();
@@ -580,7 +578,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             });
             let from_profile = profile_name
                 .as_deref()
-                .map(|p| format!(" z profilu `{p}`"))
+                .map(|p| format!(" from profile `{p}`"))
                 .unwrap_or_default();
             let code = item["code"].as_str().unwrap_or_default().to_owned();
             if mode == "create" {
@@ -589,7 +587,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .save_announcements(&guild, json!({ "items": current.items }));
                 return ix
                     .reply_ephemeral(format!(
-                        "Dodano ogłoszenie `{code}` na <t:{}:F> w <#{channel}>{from_profile}.",
+                        "Scheduled announcement `{code}` for <t:{}:F> in <#{channel}>{from_profile}.",
                         chrono::DateTime::parse_from_rfc3339(&run_at).map_or(0, |d| d.timestamp())
                     ))
                     .await;
@@ -604,7 +602,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     app.state
                         .save_announcements(&guild, json!({ "items": current.items }));
                     ix.edit_content(format!(
-                        "Wysłano ogłoszenie `{code}` teraz w <#{channel}> (parts: {parts}, messageId: `{message_id}`){from_profile}."
+                        "Sent announcement `{code}` now in <#{channel}> (parts: {parts}, messageId: `{message_id}`){from_profile}."
                     ))
                     .await
                 }
@@ -618,10 +616,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     app.state
                         .save_announcements(&guild, json!({ "items": current.items }));
                     tracing::error!("Announcement now error ({guild}/{id}): {message}");
-                    ix.edit_content(format!(
-                        "Nie udało się wysłać announcement teraz: {message}"
-                    ))
-                    .await
+                    ix.edit_content(format!("Could not send the announcement now: {message}"))
+                        .await
                 }
             }
         }
@@ -632,11 +628,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         "edit" => {
             let id = opts.string("id").unwrap_or_default().trim().to_owned();
             if id.is_empty() {
-                return ix.reply_ephemeral("Dla mode=edit podaj `id`.").await;
+                return ix.reply_ephemeral("For mode=edit, provide `id`.").await;
             }
             let Some(index) = current.items.iter().position(|i| matches_reference(i, &id)) else {
                 return ix
-                    .reply_ephemeral("Nie znaleziono ogłoszenia o tym ID.")
+                    .reply_ephemeral("No announcement with this ID was found.")
                     .await;
             };
             let next_datetime = opts.string("datetime").filter(|d| !d.is_empty());
@@ -693,14 +689,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 changed.push("button_url");
             }
             if changed.is_empty() {
-                return ix.reply_ephemeral("Nie podano żadnej zmiany.").await;
+                return ix.reply_ephemeral("No changes were given.").await;
             }
             if item["sendMode"].as_str() == Some("components")
                 && (item.get("buttonLabel").is_none_or(is_falsy)
                     || item.get("buttonURL").is_none_or(is_falsy))
             {
                 return ix
-                    .reply_ephemeral("Tryb `components` wymaga `button_label` i `button_url`.")
+                    .reply_ephemeral("The `components` mode needs `button_label` and `button_url`.")
                     .await;
             }
             item["updatedAt"] = json!(now_iso());
@@ -729,8 +725,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                             item["deliveryChannelId"] = json!(delivery);
                         }
                         note = match edited.mode {
-                            "resent" => Some("live update: ponowna publikacja na nowy kanał"),
-                            "edited_in_place" => Some("live update: edycja w miejscu"),
+                            "resent" => Some("live update: republished to the new channel"),
+                            "edited_in_place" => Some("live update: edited in place"),
                             _ => None,
                         };
                     }
@@ -748,7 +744,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 item["status"] = json!("scheduled");
             }
             let base = format!(
-                "Zmieniono ogłoszenie `{}`: {}.",
+                "Updated announcement `{}`: {}.",
                 reference(item),
                 changed.join(", ")
             );
@@ -756,7 +752,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .save_announcements(&guild, json!({ "items": current.items }));
             let reply = match (live_error, note) {
                 (Some(error), _) => format!(
-                    "{base} Zapisano zmiany w stanie, ale aktualizacja już wysłanej wiadomości nie powiodła się: {error}"
+                    "{base} The changes were saved, but updating the already sent message failed: {error}"
                 ),
                 (None, Some(note)) => format!("{base} {note}."),
                 (None, None) => base,
@@ -766,11 +762,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         "delete" => {
             let id = opts.string("id").unwrap_or_default().trim().to_owned();
             if id.is_empty() {
-                return ix.reply_ephemeral("Dla mode=delete podaj `id`.").await;
+                return ix.reply_ephemeral("For mode=delete, provide `id`.").await;
             }
             let Some(index) = current.items.iter().position(|i| matches_reference(i, &id)) else {
                 return ix
-                    .reply_ephemeral("Nie znaleziono ogłoszenia o tym ID.")
+                    .reply_ephemeral("No announcement with this ID was found.")
                     .await;
             };
             let item = current.items.remove(index);
@@ -791,14 +787,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let r = reference(&item);
             ix.reply_ephemeral(match warning {
                 Some(w) => format!(
-                    "Usunięto ogłoszenie `{r}` ze stanu, ale nie udało się skasować opublikowanej wiadomości: {w}"
+                    "Removed announcement `{r}`, but could not delete the published message: {w}"
                 ),
-                None => format!("Usunięto ogłoszenie `{r}`."),
+                None => format!("Deleted announcement `{r}`."),
             })
             .await
         }
         _ => {
-            ix.reply_ephemeral(format!("Nieznany mode announce: {mode}."))
+            ix.reply_ephemeral(format!("Unknown announce mode: {mode}."))
                 .await
         }
     }

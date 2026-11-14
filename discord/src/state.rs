@@ -137,7 +137,7 @@ impl StateStore {
         match operator_common::fs::read_json::<Value>(path) {
             Ok(value) => value,
             Err(error) => {
-                tracing::error!("Nie mozna odczytac cache {}: {error:#}", path.display());
+                tracing::error!("Cannot read cache {}: {error:#}", path.display());
                 // Keep an unparsable file: the next write would replace it with defaults.
                 if error.chain().any(|e| e.is::<serde_json::Error>()) {
                     let backup = path.with_extension(format!(
@@ -146,10 +146,10 @@ impl StateStore {
                     ));
                     match std::fs::rename(path, &backup) {
                         Ok(()) => {
-                            tracing::error!("Uszkodzony cache przeniesiony do {}", backup.display())
+                            tracing::error!("Corrupt cache moved to {}", backup.display())
                         }
                         Err(error) => tracing::error!(
-                            "Nie mozna zachowac uszkodzonego cache {}: {error}",
+                            "Cannot keep the corrupt cache {}: {error}",
                             path.display()
                         ),
                     }
@@ -196,7 +196,7 @@ impl StateStore {
                 state["guildId"] = Value::String(guild_id.to_owned());
             }
             if let Err(error) = operator_common::fs::write_json_atomic(&path, state) {
-                tracing::error!("Nie mozna zapisac cache {}: {error:#}", path.display());
+                tracing::error!("Cannot write cache {}: {error:#}", path.display());
             }
             state.clone()
         })
@@ -279,7 +279,7 @@ impl StateStore {
             }
         }
         if migrated > 0 || removed > 0 {
-            tracing::info!("Migracja cache legacy: przeniesiono={migrated}, usunieto={removed}");
+            tracing::info!("Legacy cache migration: moved={migrated}, removed={removed}");
         }
     }
 

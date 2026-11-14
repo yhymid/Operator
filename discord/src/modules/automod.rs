@@ -429,7 +429,7 @@ impl AutoMod {
             let template = actions["warnTemplate"]
                 .as_str()
                 .filter(|s| !s.is_empty())
-                .unwrap_or("Wiadomość od {user} została usunięta przez AutoMod ({rule}).");
+                .unwrap_or("A message from {user} was deleted by AutoMod ({rule}).");
             let text = template
                 .replace("{user}", &format!("<@{}>", message.author.id))
                 .replace("{rule}", violation.rule);
@@ -547,7 +547,7 @@ impl AutoMod {
         TestResult {
             violation,
             note: config::is_true(&cfg, &["rules", "duplicate", "enabled"]).then_some(
-                "Duplicate rule nie jest symulowana w /automod test bez historii wiadomości.",
+                "The duplicate rule is not simulated in /automod test without message history.",
             ),
         }
     }

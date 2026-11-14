@@ -91,7 +91,7 @@ impl MusicManager {
                 continue;
             }
             bail!(
-                "Nie udało się zmirrorować utworu Spotify do źródła odtwarzania. Spróbuj innego utworu albo ponów za chwilę."
+                "Could not mirror the Spotify track to a playable source. Try another track or retry in a moment."
             );
         }
         if replaced > 0 {
@@ -108,7 +108,7 @@ impl MusicManager {
         self.ensure_ready()?;
         let raw = compact_whitespace(query);
         if raw.is_empty() {
-            bail!("Podaj link lub frazę do wyszukania.");
+            bail!("Provide a link or a search phrase.");
         }
         let mut result: Option<SearchResult> = None;
         if !is_http_url(&raw) {
@@ -136,7 +136,7 @@ impl MusicManager {
             }
         }
         let Some(result) = result.filter(|r| !r.tracks.is_empty()) else {
-            bail!("Nie znaleziono utworu.");
+            bail!("No track found.");
         };
         let playlist = result.load_type == "playlist";
         let prepared = self
@@ -144,9 +144,9 @@ impl MusicManager {
             .await?;
         if prepared.is_empty() {
             bail!(if playlist {
-                "Nie udało się zmirrorować utworów z tej playlisty Spotify do odtwarzalnych źródeł."
+                "Could not mirror the tracks of this Spotify playlist to playable sources."
             } else {
-                "Nie znaleziono odtwarzalnego wariantu utworu."
+                "No playable version of the track was found."
             });
         }
         Ok(Resolved {

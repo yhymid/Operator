@@ -12,7 +12,7 @@ impl MusicManager {
     pub async fn save_queue_state(&self, guild_id: Id<GuildMarker>) -> Result<usize> {
         let snapshot = self.snapshot(guild_id).await;
         let Some(snapshot) = snapshot.filter(|s| s.current_track.is_some()) else {
-            bail!("Brak aktywnej kolejki do zapisania.");
+            bail!("No active queue to save.");
         };
         let tracks: Vec<Value> = snapshot
             .current_track
@@ -22,7 +22,7 @@ impl MusicManager {
             .map(|t| json!({ "url": t.url, "title": t.title }))
             .collect();
         if tracks.is_empty() {
-            bail!("Brak utworów z linkiem do zapisania.");
+            bail!("No tracks with a link to save.");
         }
         let count = tracks.len();
         let payload = json!({
@@ -44,7 +44,7 @@ impl MusicManager {
     pub(super) fn load_saved_queue_state(&self, guild_id: Id<GuildMarker>) -> Result<Value> {
         let path = self.queue_state_path(guild_id);
         if !path.exists() {
-            bail!("Brak zapisanego stanu kolejki.");
+            bail!("No saved queue state.");
         }
         let mut parsed: Value = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
         let tracks: Vec<Value> = parsed["tracks"]
@@ -55,7 +55,7 @@ impl MusicManager {
             .cloned()
             .collect();
         if tracks.is_empty() {
-            bail!("Zapisana kolejka jest pusta.");
+            bail!("The saved queue is empty.");
         }
         parsed["tracks"] = Value::Array(tracks);
         Ok(parsed)
@@ -81,7 +81,7 @@ impl MusicManager {
             }
         }
         if restored.is_empty() {
-            bail!("Nie udało się odtworzyć żadnego utworu z zapisu.");
+            bail!("Could not play any track from the saved queue.");
         }
         self.enqueue_many(&session, &restored).await?;
         let volume = state["volume"]

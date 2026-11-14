@@ -36,7 +36,7 @@ pub struct NodeConfig {
 pub fn node_config_from_env() -> Result<NodeConfig> {
     if let Some(raw) = env::var("LAVALINK_URL") {
         let parsed =
-            url::Url::parse(&raw).with_context(|| format!("Niepoprawny LAVALINK_URL: {raw}"))?;
+            url::Url::parse(&raw).with_context(|| format!("Invalid LAVALINK_URL: {raw}"))?;
         let secure = matches!(parsed.scheme(), "https" | "wss");
         let decode = |s: &str| percent_decode(s);
         return Ok(NodeConfig {
@@ -290,7 +290,7 @@ impl Node {
     ) -> Result<Value> {
         let session = self
             .session_id()
-            .ok_or_else(|| anyhow!("Lavalink node nie ma aktywnej sesji."))?;
+            .ok_or_else(|| anyhow!("The Lavalink node has no active session."))?;
         self.rest
             .request(
                 Method::PATCH,

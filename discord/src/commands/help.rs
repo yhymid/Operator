@@ -13,17 +13,17 @@ const HELP_BUTTON_PREFIX: &str = "help_panel";
 fn section_content(page: &str, can_use_owner: bool) -> String {
     let lines: &[&str] = match page.to_lowercase().as_str() {
         "music" => &[
-            "### Muzyka",
-            "`/play query:<fraza lub link>` albo `audio:<plik z Discorda>`",
+            "### Music",
+            "`/play query:<search or link>` or `audio:<file from Discord>`",
             "`/pause`, `/resume`, `/skip`, `/stop`, `/queue`, `/nowplaying`",
             "`/volume value:<+10|-10>`, `/seek time:<1:30>`",
-            "`/remove position:<numer>`, `/move from:<skąd> to:<dokąd>`, `/clear`",
-            "`/loop [mode:wyłączone|utwór|kolejka]`, `/reconnect`",
-            "Panel z przyciskami: loop, autoplay, shuffle, EQ/FX.",
-            "`/ytdlp url:<link>` - pobiera video i wysyła je na kanał (`audio:true` - sam dźwięk MP3)",
+            "`/remove position:<number>`, `/move from:<from> to:<to>`, `/clear`",
+            "`/loop [mode:off|track|queue]`, `/reconnect`",
+            "Button panel: loop, autoplay, shuffle, EQ/FX.",
+            "`/ytdlp url:<link>` - downloads a video and posts it in the channel (`audio:true` - MP3 audio only)",
         ],
         "moderation" => &[
-            "### Moderacja",
+            "### Moderation",
             "`/automod status|test`",
             "`/automod rule list|add|remove`",
             "`/verify mode:setup|status|resend_panel|exception_add|exception_remove|expire_user|cleanup_state`",
@@ -31,16 +31,16 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "`/dm user:<user>|role:<role> message:<text> confirm:true`",
         ],
         "settings" => &[
-            "### Ustawienia",
+            "### Settings",
             "`/settings mode:show`",
             "`/settings mode:show section:<autoclean|automod|verify>`",
-            "`/settings mode:set section:<autoclean|automod|verify> option:<opcja> string_value|integer_value|boolean_value|channel_value|role_value|user_value:<wartość>`",
+            "`/settings mode:set section:<autoclean|automod|verify> option:<option> string_value|integer_value|boolean_value|channel_value|role_value|user_value:<value>`",
             "`/health`",
             "`/debug mode:<music|permissions|logs>`",
         ],
         "owner" if !can_use_owner => &[
             "### Owner",
-            "Ta sekcja jest dostępna tylko dla ownera bota.",
+            "This section is only available to the bot owner.",
         ],
         "owner" => &[
             "### Owner",
@@ -51,12 +51,12 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
         ],
         _ => &[
             "### Start",
-            "`/play`, `/skip`, `/queue`, `/nowplaying` ... - muzyka",
-            "`/ytdlp url:<link>` - pobieranie video na kanał",
-            "`/automod ...`, `/verify ...`, `/logs ...`, `/dm ...` - moderacja, verify i full logs",
-            "`/settings ...`, `/health`, `/debug ...` - konfiguracja i diagnostyka",
-            "`/announce ...` - planowane i natychmiastowe announcementy",
-            "`/clean ...`, `/cache ...` - narzędzia ownera",
+            "`/play`, `/skip`, `/queue`, `/nowplaying` ... - music",
+            "`/ytdlp url:<link>` - download a video to the channel",
+            "`/automod ...`, `/verify ...`, `/logs ...`, `/dm ...` - moderation, verify and full logs",
+            "`/settings ...`, `/health`, `/debug ...` - configuration and diagnostics",
+            "`/announce ...` - scheduled and instant announcements",
+            "`/clean ...`, `/cache ...` - owner tools",
         ],
     };
     lines.join("\n")
@@ -68,9 +68,9 @@ pub fn panel_payload(app: &App, user_id: Id<UserMarker>, page: &str) -> Value {
     let can_use_owner = app.is_owner(user_id);
     let pages = [
         ("overview", "Start", false),
-        ("music", "Muzyka", false),
-        ("moderation", "Moderacja", false),
-        ("settings", "Ustawienia", false),
+        ("music", "Music", false),
+        ("moderation", "Moderation", false),
+        ("settings", "Settings", false),
         ("owner", "Owner", true),
     ];
     let buttons: Vec<Value> = pages
@@ -126,7 +126,7 @@ pub async fn handle_component(ix: &Ix<'_>) -> Result<bool> {
         return Ok(false);
     }
     if ix.user_id().to_string() != owner {
-        ix.reply_ephemeral("Ten panel pomocy należy do innego użytkownika. Użyj /help.")
+        ix.reply_ephemeral("This help panel belongs to another user. Use /help.")
             .await?;
         return Ok(true);
     }

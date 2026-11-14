@@ -106,21 +106,33 @@ impl Settings {
 fn normalize_url(value: &str) -> Result<String, &'static str> {
     let raw = value.trim();
     if raw.is_empty() || raw.encode_utf16().count() > 2048 {
-        return Err("Podaj poprawny adres URL.");
+        return Err("Provide a valid URL.");
     }
-    let parsed = url::Url::parse(raw).map_err(|_| "Podaj poprawny adres URL.")?;
+    let parsed = url::Url::parse(raw).map_err(|_| "Provide a valid URL.")?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err("Dozwolone są tylko adresy http:// i https://.");
+        return Err("Only http:// and https:// URLs are allowed.");
     }
     Ok(parsed.to_string())
 }
 
 /// Refuses links to local/private addresses (Lavalink, cloud metadata, LAN) before yt-dlp runs.
 async fn check_target(url: &str) -> Result<(), &'static str> {
-    let parsed = url::Url::parse(url).map_err(|_| "Podaj poprawny adres URL.")?;
+    let parsed = url::Url::parse(url).map_err(|_| "Provide a valid URL.")?;
     let host = parsed.host_str().unwrap_or_default();
     let port = parsed.port_or_known_default().unwrap_or(443);
-    operator_common::net::ensure_public_host(host, port).await
+    operator_common::net::ensure_public_host(host, port)
+        .await
+        .map_err(host_error_text)
+}
+
+pub fn host_error_text(error: operator_common::net::HostError) -> &'static str {
+    use operator_common::net::HostError;
+    match error {
+        HostError::Missing => "The URL has no host.",
+        HostError::Private => "Local and private addresses are not allowed.",
+        HostError::NotFound => "No server was found at this address.",
+        HostError::LookupFailed => "Could not check the server address.",
+    }
 }
 
 fn is_youtube(url: &str) -> bool {
@@ -191,10 +203,8 @@ async fn run(
     let stderr = read_err.await.unwrap_or_default();
     match status {
         Some(s) if s.success() => Ok(stdout),
-        None => Err(format!("Przekroczono limit czasu ({program})")),
-        Some(_) => {
-            Err(last_line(&stderr).unwrap_or_else(|| format!("{program} zakończył się błędem")))
-        }
+        None => Err(format!("Time limit exceeded ({program})")),
+        Some(_) => Err(last_line(&stderr).unwrap_or_else(|| format!("{program} failed"))),
     }
 }
 
@@ -366,7 +376,7 @@ async fn publish(settings: &Settings, file: &Path) -> Result<String> {
 
 fn too_large_text(size: u64, link: &str) -> String {
     format!(
-        "Video pobrane ({:.1} MiB) i jest za duże na Discorda. Otwórz klasyczny player (link ważny 6 godzin): {link}",
+        "The video was downloaded ({:.1} MiB) but is too large for Discord. Open it in the web player (link valid for 6 hours): {link}",
         size as f64 / 1024.0 / 1024.0
     )
 }
@@ -378,7 +388,7 @@ fn too_large_text(size: u64, link: &str) -> String {
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     if !ix.in_guild() {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("This command only works in a server.")
             .await;
     }
     let raw = ix.opts().string("url").unwrap_or_default();
@@ -389,9 +399,9 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     };
     ix.defer(false).await?;
     if let Err(message) = check_target(&url).await {
-        tracing::warn!("ytdlp: odrzucono adres ({message})");
+        tracing::warn!("ytdlp: rejected URL ({message})");
         return ix
-            .edit_content(format!("Nie udało się pobrać video: {message}"))
+            .edit_content(format!("Could not download the video: {message}"))
             .await;
     }
     cleanup_expired_media().await;
@@ -410,12 +420,12 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     .await
     .unwrap_or_else(|_| {
         Err(anyhow!(
-            "Przekroczono limit czasu (Discord pozwala odpowiedzieć w ciągu 15 minut)."
+            "Time limit exceeded (Discord allows a response within 15 minutes)."
         ))
     });
     if let Err(error) = tokio::fs::remove_dir_all(&temp_dir).await {
         tracing::warn!(
-            "Nie udalo sie usunac katalogu tymczasowego {}: {error}",
+            "Could not remove the temporary directory {}: {error}",
             temp_dir.display()
         );
     }
@@ -506,17 +516,17 @@ async fn download_and_send(
         // Both limits make yt-dlp skip the video and still exit with success.
         if stdout.contains("does not pass filter") {
             bail!(
-                "Film jest dłuższy niż {} min.",
+                "The video is longer than {} min.",
                 settings.max_duration_secs.div_ceil(60)
             );
         }
         if stdout.contains("larger than max-filesize") {
             bail!(
-                "Plik jest większy niż {} MB.",
+                "The file is larger than {} MB.",
                 settings.max_download_bytes / (1024 * 1024)
             );
         }
-        bail!("yt-dlp nie zwrócił pobranego pliku.");
+        bail!("yt-dlp did not return a downloaded file.");
     };
     let file = if audio {
         file
@@ -553,36 +563,37 @@ async fn download_and_send(
 /// generic so raw tool output (paths, internal hosts) never reaches the chat.
 fn friendly_error(details: &str) -> String {
     let lower = details.to_lowercase();
-    let reason =
-        if details.starts_with("Film jest dłuższy") || details.starts_with("Plik jest większy") {
-            details.lines().next().unwrap_or(details)
-        } else if lower.contains("przekroczono limit czasu") {
-            "Przekroczono limit czasu pobierania lub konwersji."
-        } else if lower.contains("confirm your age") || lower.contains("age-restricted") {
-            "Film ma ograniczenie wiekowe."
-        } else if lower.contains("sign in to confirm") || lower.contains("not a bot") {
-            "YouTube zablokował pobieranie (wymaga zalogowania). Trzeba odświeżyć cookies bota."
-        } else if lower.contains("private video") {
-            "Film jest prywatny."
-        } else if lower.contains("not available in your country")
-            || lower.contains("geo restrict")
-            || lower.contains("geo-restrict")
-        {
-            "Film jest niedostępny w regionie serwera."
-        } else if lower.contains("unsupported url") {
-            "Ten adres nie jest obsługiwany."
-        } else if lower.contains("video unavailable") || lower.contains("has been removed") {
-            "Film jest niedostępny."
-        } else if lower.contains("http error 403") {
-            "Serwer odmówił dostępu (403)."
-        } else if lower.contains("http error 404") {
-            "Nie znaleziono strony (404)."
-        } else if lower.contains("is live") || lower.contains("live event") {
-            "Transmisji na żywo nie da się pobrać."
-        } else {
-            return "Nie udało się pobrać video.".to_owned();
-        };
-    format!("Nie udało się pobrać video: {reason}")
+    let reason = if details.starts_with("The video is longer")
+        || details.starts_with("The file is larger")
+    {
+        details.lines().next().unwrap_or(details)
+    } else if lower.contains("time limit exceeded") {
+        "The download or conversion took too long."
+    } else if lower.contains("confirm your age") || lower.contains("age-restricted") {
+        "The video is age-restricted."
+    } else if lower.contains("sign in to confirm") || lower.contains("not a bot") {
+        "YouTube blocked the download (login required). The bot's cookies need to be refreshed."
+    } else if lower.contains("private video") {
+        "The video is private."
+    } else if lower.contains("not available in your country")
+        || lower.contains("geo restrict")
+        || lower.contains("geo-restrict")
+    {
+        "The video is not available in the server's region."
+    } else if lower.contains("unsupported url") {
+        "This URL is not supported."
+    } else if lower.contains("video unavailable") || lower.contains("has been removed") {
+        "The video is unavailable."
+    } else if lower.contains("http error 403") {
+        "The server denied access (403)."
+    } else if lower.contains("http error 404") {
+        "Page not found (404)."
+    } else if lower.contains("is live") || lower.contains("live event") {
+        "Live streams cannot be downloaded."
+    } else {
+        return "Could not download the video.".to_owned();
+    };
+    format!("Could not download the video: {reason}")
 }
 
 /// Slash command definition (must match `commands.json`).
@@ -590,11 +601,11 @@ fn friendly_error(details: &str) -> String {
 fn definition() -> serde_json::Value {
     serde_json::json!({
         "name": "ytdlp",
-        "description": "Pobiera video z podanego adresu i wysyła je na kanał",
+        "description": "Downloads a video from a URL and posts it in the channel",
         "dm_permission": false,
         "options": [
-            { "type": 3, "name": "url", "description": "Adres URL video", "required": true },
-            { "type": 5, "name": "audio", "description": "Tylko dźwięk (MP3)", "required": false }
+            { "type": 3, "name": "url", "description": "Video URL", "required": true },
+            { "type": 5, "name": "audio", "description": "Audio only (MP3)", "required": false }
         ]
     })
 }
@@ -663,22 +674,22 @@ mod tests {
     fn friendly_errors() {
         assert_eq!(
             friendly_error("ERROR: [youtube] abc: Sign in to confirm you’re not a bot."),
-            "Nie udało się pobrać video: YouTube zablokował pobieranie (wymaga zalogowania). \
-             Trzeba odświeżyć cookies bota."
+            "Could not download the video: YouTube blocked the download (login required). \
+             The bot's cookies need to be refreshed."
         );
         assert_eq!(
-            friendly_error("Film jest dłuższy niż 30 min."),
-            "Nie udało się pobrać video: Film jest dłuższy niż 30 min."
+            friendly_error("The video is longer than 30 min."),
+            "Could not download the video: The video is longer than 30 min."
         );
         assert_eq!(
             friendly_error(
                 "ERROR: Unable to download webpage: <urlopen error [Errno 111] Connection refused> (10.0.0.5)"
             ),
-            "Nie udało się pobrać video."
+            "Could not download the video."
         );
         assert_eq!(
             friendly_error("ERROR: [generic] Unsupported URL: http://example.com/"),
-            "Nie udało się pobrać video: Ten adres nie jest obsługiwany."
+            "Could not download the video: This URL is not supported."
         );
     }
 

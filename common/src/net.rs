@@ -43,6 +43,19 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
         || ip.segments()[..6].iter().all(|s| *s == 0))
 }
 
+/// Why `ensure_public_host` refused a host; each bot words the message in its own language.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostError {
+    /// The URL has no host.
+    Missing,
+    /// The host is (or resolves to) a loopback, private, link-local or reserved address.
+    Private,
+    /// The name does not resolve.
+    NotFound,
+    /// The lookup failed or timed out.
+    LookupFailed,
+}
+
 /// `true` for addresses reachable on the public internet.
 pub fn is_public_ip(ip: IpAddr) -> bool {
     match ip {
@@ -56,19 +69,19 @@ pub fn is_public_ip(ip: IpAddr) -> bool {
 ///
 /// This does not stop a public site from redirecting yt-dlp to a private address; it closes
 /// the direct route (`http://127.0.0.1:2333/...`, `http://169.254.169.254/...`, LAN hosts).
-pub async fn ensure_public_host(host: &str, port: u16) -> Result<(), &'static str> {
+pub async fn ensure_public_host(host: &str, port: u16) -> Result<(), HostError> {
     let host = host
         .trim_start_matches('[')
         .trim_end_matches(']')
         .to_owned();
     if host.is_empty() {
-        return Err("Brak hosta w adresie.");
+        return Err(HostError::Missing);
     }
     if let Ok(ip) = host.parse::<IpAddr>() {
         return if is_public_ip(ip) {
             Ok(())
         } else {
-            Err("Adresy lokalne i prywatne są niedozwolone.")
+            Err(HostError::Private)
         };
     }
     let lookup = tokio::task::spawn_blocking(move || {
@@ -78,13 +91,13 @@ pub async fn ensure_public_host(host: &str, port: u16) -> Result<(), &'static st
     });
     let addrs = match tokio::time::timeout(LOOKUP_TIMEOUT, lookup).await {
         Ok(Ok(Ok(addrs))) if !addrs.is_empty() => addrs,
-        Ok(Ok(_)) => return Err("Nie znaleziono serwera pod tym adresem."),
-        _ => return Err("Nie udało się sprawdzić adresu serwera."),
+        Ok(Ok(_)) => return Err(HostError::NotFound),
+        _ => return Err(HostError::LookupFailed),
     };
     if addrs.iter().all(|ip| is_public_ip(*ip)) {
         Ok(())
     } else {
-        Err("Adresy lokalne i prywatne są niedozwolone.")
+        Err(HostError::Private)
     }
 }
 
@@ -129,10 +142,16 @@ mod tests {
 
     #[tokio::test]
     async fn literal_hosts_need_no_lookup() {
-        assert!(ensure_public_host("127.0.0.1", 80).await.is_err());
-        assert!(ensure_public_host("[::1]", 80).await.is_err());
+        assert_eq!(
+            ensure_public_host("127.0.0.1", 80).await,
+            Err(HostError::Private)
+        );
+        assert_eq!(
+            ensure_public_host("[::1]", 80).await,
+            Err(HostError::Private)
+        );
         assert!(ensure_public_host("localhost", 80).await.is_err());
         assert!(ensure_public_host("1.1.1.1", 443).await.is_ok());
-        assert!(ensure_public_host("", 443).await.is_err());
+        assert_eq!(ensure_public_host("", 443).await, Err(HostError::Missing));
     }
 }

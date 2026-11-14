@@ -1104,8 +1104,8 @@ impl FullLogs {
                 let dropped = self.delivery_dropped.fetch_add(1, Ordering::SeqCst) + 1;
                 if dropped == 1 || dropped.is_multiple_of(100) {
                     tracing::warn!(
-                        "FullLogs: kolejka wysylki dla {guild_id} pelna ({DELIVERY_QUEUE_LIMIT}); \
-                         pominieto na kanale {dropped} wpisow (sa w pliku logu)"
+                        "FullLogs: delivery queue for {guild_id} is full ({DELIVERY_QUEUE_LIMIT}); \
+                         skipped {dropped} entries in the channel (they are in the log file)"
                     );
                 }
             }
@@ -1174,7 +1174,7 @@ impl FullLogs {
         let (entry, note) = match latest {
             Some((entry, day)) => (
                 entry,
-                format!("Podgląd bazuje na ostatnim zapisanym wpisie z dnia `{day}`."),
+                format!("The preview uses the last saved entry from `{day}`."),
             ),
             None => (
                 json!({
@@ -1186,10 +1186,10 @@ impl FullLogs {
                     "target": { "kind": "guild", "id": guild },
                     "location": null,
                     "summary": "Preview sample entry.",
-                    "details": ["source=preview", "note=Brak zapisanych wpisów, pokazuje przykładowy format."],
+                    "details": ["source=preview", "note=No saved entries, showing a sample format."],
                     "metadata": { "source": "preview:fallback" }
                 }),
-                "Brak zapisanych wpisów. Pokazuję przykładowy format loga.".to_owned(),
+                "No saved entries. Showing a sample log format.".to_owned(),
             ),
         };
         v2_line_payload(&entry, FLAG_EPHEMERAL, Some(("## Logs Preview", &note)))
@@ -1202,7 +1202,7 @@ impl FullLogs {
         day: &str,
     ) -> anyhow::Result<Option<(PathBuf, String)>> {
         if !is_valid_day_key(day) {
-            anyhow::bail!("Niepoprawny format dnia. Użyj YYYY-MM-DD.");
+            anyhow::bail!("Invalid day format. Use YYYY-MM-DD.");
         }
         let guild = guild_id.to_string();
         self.flush_guild(&guild).await;
@@ -1223,7 +1223,7 @@ impl FullLogs {
         self.flush_guild(&guild).await;
         if let Some(day) = day {
             if !is_valid_day_key(day) {
-                anyhow::bail!("Niepoprawny format dnia. Użyj YYYY-MM-DD.");
+                anyhow::bail!("Invalid day format. Use YYYY-MM-DD.");
             }
             let path = self.day_path(&guild, day);
             if !path.exists() {

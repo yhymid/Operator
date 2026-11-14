@@ -31,30 +31,30 @@ fn normalize_rule_value(kind: &str, value: &str) -> Result<String, String> {
         "word" => {
             let normalized = compact_whitespace(value).to_lowercase();
             if normalized.is_empty() {
-                return Err("Reguła słowa nie może być pusta.".to_owned());
+                return Err("A word rule cannot be empty.".to_owned());
             }
             Ok(normalized)
         }
         "regex" => {
             let normalized = value.trim();
             if normalized.is_empty() {
-                return Err("Reguła regex nie może być pusta.".to_owned());
+                return Err("A regex rule cannot be empty.".to_owned());
             }
             jsregex::compile(normalized, false)
-                .map_err(|error| format!("Niepoprawny regex: {error}"))?;
+                .map_err(|error| format!("Invalid regex: {error}"))?;
             Ok(normalized.to_owned())
         }
         "allowed_domain" => {
             let raw = value.trim().to_lowercase();
             if raw.is_empty() {
-                return Err("Dozwolona domena nie może być pusta.".to_owned());
+                return Err("An allowed domain cannot be empty.".to_owned());
             }
             let candidate = if raw.contains("://") {
                 raw
             } else {
                 format!("https://{raw}")
             };
-            let invalid = || "Niepoprawna domena. Użyj np. `example.com`.".to_owned();
+            let invalid = || "Invalid domain. Use e.g. `example.com`.".to_owned();
             let host = url::Url::parse(&candidate)
                 .ok()
                 .and_then(|u| u.host_str().map(str::to_lowercase))
@@ -65,7 +65,7 @@ fn normalize_rule_value(kind: &str, value: &str) -> Result<String, String> {
             }
             Ok(normalized)
         }
-        other => Err(format!("Nieznany typ reguły: {other}")),
+        other => Err(format!("Unknown rule type: {other}")),
     }
 }
 
@@ -98,7 +98,7 @@ fn managed_rules(cfg: &Value) -> Vec<(&'static str, Vec<String>)> {
 
 fn rule_preview(values: &[String], limit: usize) -> String {
     if values.is_empty() {
-        return "brak".to_owned();
+        return "none".to_owned();
     }
     let preview = values
         .iter()
@@ -109,7 +109,7 @@ fn rule_preview(values: &[String], limit: usize) -> String {
     if values.len() <= limit {
         preview
     } else {
-        format!("{preview}\n- ... i jeszcze {}", values.len() - limit)
+        format!("{preview}\n- ... and {} more", values.len() - limit)
     }
 }
 
@@ -145,9 +145,9 @@ fn status_lines(app: &App) -> Vec<String> {
     let count = |path: &[&str]| cfg_array_len(&cfg, path);
     let yes = |path: &[&str]| {
         if config::is_true(&cfg, path) {
-            "tak"
+            "yes"
         } else {
-            "nie"
+            "no"
         }
     };
     let max_mentions = config::number(&cfg, &["rules", "maxMentions"]);
@@ -202,7 +202,7 @@ fn status_lines(app: &App) -> Vec<String> {
         format!("Exempt roles: {}", count(&["exemptRoles"])),
         format!(
             "Log channel: {}",
-            config::text(&cfg, &["logChannelId"]).map_or("brak".to_owned(), |c| format!("<#{c}>"))
+            config::text(&cfg, &["logChannelId"]).map_or("none".to_owned(), |c| format!("<#{c}>"))
         ),
         String::new(),
         "Managed rule preview:".to_owned(),
@@ -229,7 +229,7 @@ fn mutate_rule(app: &App, kind: &str, raw: &str, action: &str) -> Result<Mutatio
     let mut cfg = config::read(&app.paths.config_path).map_err(|e| e.to_string())?;
     let mut rules = managed_rules(&cfg);
     let Some((_, current)) = rules.iter_mut().find(|(k, _)| *k == kind) else {
-        return Err(format!("Nieznany typ reguły: {kind}"));
+        return Err(format!("Unknown rule type: {kind}"));
     };
     let key = |v: &str| {
         if kind == "regex" {
@@ -246,7 +246,7 @@ fn mutate_rule(app: &App, kind: &str, raw: &str, action: &str) -> Result<Mutatio
         ("remove", Some(index)) => {
             current.remove(index);
         }
-        _ => return Err(format!("Nieznana akcja reguły: {action}")),
+        _ => return Err(format!("Unknown rule action: {action}")),
     }
     let count = current.len();
     if !cfg["automod"].is_object() {
@@ -270,11 +270,13 @@ fn mutate_rule(app: &App, kind: &str, raw: &str, action: &str) -> Result<Mutatio
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     if !ix.in_guild() {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("This command only works in a server.")
             .await;
     }
     if !ix.member_has(Permissions::ADMINISTRATOR) {
-        return ix.reply_ephemeral("Brak uprawnień Administratora.").await;
+        return ix
+            .reply_ephemeral("Administrator permission required.")
+            .await;
     }
     let app = ix.app;
     let opts = ix.opts();
@@ -291,7 +293,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .to_lowercase();
             if kind != "all" && rule_meta(&kind).is_none() {
                 return ix
-                    .reply_ephemeral(format!("Nieznany typ reguł: `{kind}`."))
+                    .reply_ephemeral(format!("Unknown rule type: `{kind}`."))
                     .await;
             }
             match config::read(&app.paths.config_path) {
@@ -308,7 +310,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 Err(error) => {
                     ix.reply_ephemeral(config::format_config_error(
                         &error,
-                        "Nie można odczytać config.json. ",
+                        "Cannot read config.json. ",
                     ))
                     .await
                 }
@@ -323,28 +325,28 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let raw = opts.string("value").unwrap_or_default();
             let Some((label, _)) = rule_meta(&kind) else {
                 return ix
-                    .reply_ephemeral(format!("Nieznany typ reguł: `{kind}`."))
+                    .reply_ephemeral(format!("Unknown rule type: `{kind}`."))
                     .await;
             };
             match mutate_rule(app, &kind, &raw, sub) {
                 Ok(Mutation::Unchanged(reason, value, count)) => {
                     let message = if reason == "exists" {
-                        format!("{label}: `{value}` już istnieje. Nic nie zmieniono.")
+                        format!("{label}: `{value}` already exists. Nothing changed.")
                     } else {
-                        format!("{label}: `{value}` nie istnieje. Nic nie usunięto.")
+                        format!("{label}: `{value}` does not exist. Nothing removed.")
                     };
-                    ix.reply_ephemeral(format!("{message}\nAktualna liczba wpisów: {count}"))
+                    ix.reply_ephemeral(format!("{message}\nCurrent number of entries: {count}"))
                         .await
                 }
                 Ok(Mutation::Changed(value, count)) => {
-                    let verb = if sub == "add" { "Dodano" } else { "Usunieto" };
+                    let verb = if sub == "add" { "Added" } else { "Removed" };
                     ix.reply_ephemeral(format!(
-                        "{verb} regułę {label}: `{value}`\nAktualna liczba wpisów: {count}"
+                        "{verb} {label} rule: `{value}`\nCurrent number of entries: {count}"
                     ))
                     .await
                 }
                 Err(error) => {
-                    ix.reply_ephemeral(format!("Zmiana reguły nie powiodła się. {error}"))
+                    ix.reply_ephemeral(format!("Changing the rule failed. {error}"))
                         .await
                 }
             }
@@ -358,14 +360,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .to_lowercase();
             if !TEST_TYPES.contains(&kind.as_str()) {
                 return ix
-                    .reply_ephemeral(format!("Nieznany typ testu: `{kind}`."))
+                    .reply_ephemeral(format!("Unknown test type: `{kind}`."))
                     .await;
             }
             let mut candidate = None;
             if kind != "live" {
                 let Some(raw) = opts.string("value").filter(|v| !v.is_empty()) else {
                     return ix
-                        .reply_ephemeral("Dla testu konkretnej reguły podaj też `value`.")
+                        .reply_ephemeral("To test a specific rule, also provide `value`.")
                         .await;
                 };
                 match normalize_rule_value(&kind, &raw) {
@@ -378,14 +380,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .test_content(&content, &kind, candidate.as_deref());
             let mut lines = Vec::new();
             if kind == "live" {
-                lines.push("AutoMod test: aktywne reguły".to_owned());
+                lines.push("AutoMod test: active rules".to_owned());
                 lines.push(format!("Content: `{content}`"));
                 match &result.violation {
                     Some(v) => {
                         lines.push(format!("Matched: {}", v.rule));
                         lines.push(format!("Details: {}", v.details));
                     }
-                    None => lines.push("Result: brak dopasowania w aktywnych regułach.".to_owned()),
+                    None => lines.push("Result: no match in the active rules.".to_owned()),
                 }
             } else {
                 let (label, _) = rule_meta(&kind).unwrap_or(("?", "?"));
@@ -394,10 +396,10 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 lines.push(format!("Content: `{content}`"));
                 match &result.violation {
                     Some(v) => {
-                        lines.push(format!("Result: trafia w tę regułę ({}).", v.rule));
+                        lines.push(format!("Result: matches this rule ({}).", v.rule));
                         lines.push(format!("Details: {}", v.details));
                     }
-                    None => lines.push("Result: ta treść nie trafia w tę regułę.".to_owned()),
+                    None => lines.push("Result: this content does not match this rule.".to_owned()),
                 }
             }
             if let Some(note) = result.note {
@@ -405,7 +407,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
             ix.reply_ephemeral(lines.join("\n")).await
         }
-        _ => ix.reply_ephemeral("Nieznana komenda automod.").await,
+        _ => ix.reply_ephemeral("Unknown automod command.").await,
     }
 }
 

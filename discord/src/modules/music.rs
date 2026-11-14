@@ -415,7 +415,7 @@ impl Player {
             return None;
         }
         let track = normalize_track(current);
-        let prefix = if self.paused { "Pauza: " } else { "Gra: " };
+        let prefix = if self.paused { "Paused: " } else { "Playing: " };
         Some(truncate_inline(
             &format!("{prefix}{}", track.title),
             MAX_VOICE_CHANNEL_STATUS_LENGTH,
@@ -634,7 +634,7 @@ impl MusicManager {
     fn node(&self) -> Result<&Arc<Node>> {
         self.node
             .as_ref()
-            .ok_or_else(|| anyhow!("Brak dostępnego node Lavalink."))
+            .ok_or_else(|| anyhow!("No Lavalink node available."))
     }
 
     fn usable(&self) -> bool {
@@ -644,7 +644,7 @@ impl MusicManager {
     fn ensure_ready(&self) -> Result<()> {
         if !self.initialized.load(Ordering::SeqCst) || !self.usable() {
             bail!(
-                "Lavalink nie jest połączony. Sprawdź LAVALINK_HOST/LAVALINK_PORT/LAVALINK_PASSWORD i czy Lavalink v4 działa."
+                "Lavalink is not connected. Check LAVALINK_HOST/LAVALINK_PORT/LAVALINK_PASSWORD and that Lavalink v4 is running."
             );
         }
         Ok(())
@@ -685,7 +685,7 @@ impl MusicManager {
             && current_channel != voice_channel_id
         {
             if existing.has_music() {
-                bail!("Bot odtwarza już muzykę na kanale <#{current_channel}>.");
+                bail!("The bot is already playing music in <#{current_channel}>.");
             }
             drop(players);
             self.destroy(app, guild_id, "voice channel changed").await;
@@ -701,7 +701,7 @@ impl MusicManager {
             );
         }
         let Some(player) = players.get_mut(&guild_id) else {
-            bail!("Sesja muzyki wygasła.");
+            bail!("The music session expired.");
         };
         player.idle_generation += 1;
         let session = Session {
@@ -771,7 +771,7 @@ impl MusicManager {
         let mut players = self.players.lock().await;
         let player = players
             .get_mut(&session.guild_id)
-            .ok_or_else(|| anyhow!("Sesja muzyki wygasła."))?;
+            .ok_or_else(|| anyhow!("The music session expired."))?;
         let was_idle = !player.playing && player.current.is_none();
         let position = player.tracks.len() + 1;
         player.tracks.push_back(track.raw.clone());
@@ -791,12 +791,12 @@ impl MusicManager {
         tracks: &[PublicTrack],
     ) -> Result<EnqueueManyResult> {
         if tracks.is_empty() {
-            bail!("Nie znaleziono utworów do dodania.");
+            bail!("No tracks found to add.");
         }
         let mut players = self.players.lock().await;
         let player = players
             .get_mut(&session.guild_id)
-            .ok_or_else(|| anyhow!("Sesja muzyki wygasła."))?;
+            .ok_or_else(|| anyhow!("The music session expired."))?;
         let was_idle = !player.playing && player.current.is_none();
         player.tracks.extend(tracks.iter().map(|t| t.raw.clone()));
         if was_idle {

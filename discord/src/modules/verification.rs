@@ -47,7 +47,7 @@ fn lockout_until(app: &App, guild: &str, user: &str) -> Option<DateTime<Utc>> {
 
 fn locked_text(until: DateTime<Utc>) -> String {
     format!(
-        "Weryfikacja jest tymczasowo zablokowana. Spróbuj ponownie <t:{}:R>.",
+        "Verification is temporarily locked. Try again <t:{}:R>.",
         until.timestamp()
     )
 }
@@ -116,19 +116,19 @@ pub async fn handle_button(ix: &Ix<'_>) -> Result<()> {
         .and_then(discord::parse_id::<RoleMarker>)
     else {
         return ix
-            .reply_ephemeral("Rola weryfikacyjna nie jest skonfigurowana.")
+            .reply_ephemeral("The verification role is not configured.")
             .await;
     };
 
     let user_id = ix.user_id();
     let Some(member) = fetch_member(app, guild_id, user_id).await else {
         return ix
-            .reply_ephemeral("Nie udało się pobrać Twoich danych na serwerze.")
+            .reply_ephemeral("Could not fetch your server member data.")
             .await;
     };
     if member.roles.contains(&role_id) {
         return ix
-            .reply_ephemeral("Masz już aktywną rolę weryfikacyjną.")
+            .reply_ephemeral("You already have an active verification role.")
             .await;
     }
 
@@ -139,12 +139,12 @@ pub async fn handle_button(ix: &Ix<'_>) -> Result<()> {
 
     let Some(position) = role_position(app, guild_id, role_id).await else {
         return ix
-            .reply_ephemeral("Skonfigurowana rola weryfikacyjna nie istnieje.")
+            .reply_ephemeral("The configured verification role does not exist.")
             .await;
     };
     if !bot_can_assign(app, guild_id, position) {
         return ix
-            .reply_ephemeral("Bot nie może nadać roli weryfikacyjnej.")
+            .reply_ephemeral("The bot cannot give the verification role.")
             .await;
     }
 
@@ -174,13 +174,13 @@ pub async fn handle_button(ix: &Ix<'_>) -> Result<()> {
     let length = code.chars().count();
     ix.show_modal(json!({
         "custom_id": CAPTCHA_MODAL_ID,
-        "title": "Weryfikacja",
+        "title": "Verification",
         "components": [{
             "type": 1,
             "components": [{
                 "type": 4,
                 "custom_id": CAPTCHA_INPUT_ID,
-                "label": format!("Przepisz kod: {code}"),
+                "label": format!("Type the code: {code}"),
                 "style": 1,
                 "required": true,
                 "min_length": length,
@@ -212,14 +212,14 @@ pub async fn handle_modal(ix: &Ix<'_>) -> Result<()> {
     app.state.prune_expired_verification_challenges(&guild, now);
     let Some(challenge) = app.state.verification_challenge(&guild, &user) else {
         return ix
-            .reply_ephemeral("Captcha wygasła. Kliknij przycisk weryfikacji ponownie.")
+            .reply_ephemeral("The captcha expired. Click the verification button again.")
             .await;
     };
     let expires = parse_iso(challenge["expiresAt"].as_str().unwrap_or_default());
     if expires.is_none_or(|e| Utc::now() > e) {
         app.state.remove_verification_challenge(&guild, &user);
         return ix
-            .reply_ephemeral("Captcha wygasła. Kliknij przycisk weryfikacji ponownie.")
+            .reply_ephemeral("The captcha expired. Click the verification button again.")
             .await;
     }
 
@@ -235,7 +235,7 @@ pub async fn handle_modal(ix: &Ix<'_>) -> Result<()> {
         app.state.remove_verification_challenge(&guild, &user);
         return ix
             .reply_ephemeral(format!(
-                "Zły kod. Weryfikacja zablokowana na 1 godzinę. Spróbuj ponownie <t:{}:R>.",
+                "Wrong code. Verification is locked for 1 hour. Try again <t:{}:R>.",
                 until.timestamp()
             ))
             .await;
@@ -255,20 +255,20 @@ pub async fn handle_modal(ix: &Ix<'_>) -> Result<()> {
     else {
         app.state.remove_verification_challenge(&guild, &user);
         return ix
-            .reply_ephemeral("Nie można dokończyć weryfikacji w tej chwili.")
+            .reply_ephemeral("Verification cannot be completed right now.")
             .await;
     };
 
     if member.roles.contains(&role_id) {
         app.state.remove_verification_challenge(&guild, &user);
         return ix
-            .reply_ephemeral("Masz już aktywną rolę weryfikacyjną.")
+            .reply_ephemeral("You already have an active verification role.")
             .await;
     }
     if !bot_can_assign(app, guild_id, position) {
         app.state.remove_verification_challenge(&guild, &user);
         return ix
-            .reply_ephemeral("Bot nie może nadać roli weryfikacyjnej.")
+            .reply_ephemeral("The bot cannot give the verification role.")
             .await;
     }
 
@@ -284,7 +284,7 @@ pub async fn handle_modal(ix: &Ix<'_>) -> Result<()> {
                 .set_user_verification_expiry(&guild, &user, &to_iso(expiry));
             app.state.remove_verification_challenge(&guild, &user);
             ix.reply_ephemeral(format!(
-                "Weryfikacja zakończona. Rola wygasa <t:{}:f>.",
+                "Verification complete. The role expires <t:{}:f>.",
                 expiry.timestamp()
             ))
             .await
@@ -292,7 +292,7 @@ pub async fn handle_modal(ix: &Ix<'_>) -> Result<()> {
         Err(error) => {
             tracing::error!("Verify captcha assign error: {error}");
             app.state.remove_verification_challenge(&guild, &user);
-            ix.reply_ephemeral("Nie udało się nadać roli po sprawdzeniu captcha.")
+            ix.reply_ephemeral("Could not give the role after the captcha check.")
                 .await
         }
     }
@@ -323,7 +323,7 @@ async fn remove_role(
     {
         Ok(_) => true,
         Err(error) => {
-            tracing::error!("Nie mozna usunac verify na {guild_id}/{user_id}: {error}");
+            tracing::error!("Cannot remove verify on {guild_id}/{user_id}: {error}");
             false
         }
     }

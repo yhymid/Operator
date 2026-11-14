@@ -59,13 +59,13 @@ const AUTOCLEAN_OPTIONS: &[OptionDef] = &[
         "enabled",
         Kind::Boolean,
         &["enabled"],
-        "Włącza lub wyłącza cały AutoClean",
+        "Turns all of AutoClean on or off",
     ),
     opt(
         "cron_schedule",
         Kind::Str,
         &["cronSchedule"],
-        "Cron wykonywania czyszczenia",
+        "Cleanup cron schedule",
     ),
     opt(
         "timezone",
@@ -77,49 +77,49 @@ const AUTOCLEAN_OPTIONS: &[OptionDef] = &[
         "delete_messages_older_than_days",
         Kind::Integer,
         &["deleteMessagesOlderThanDays"],
-        "Usuwaj wiadomości starsze niż X dni",
+        "Delete messages older than X days",
     ),
     opt(
         "delete_limit",
         Kind::Integer,
         &["deleteLimit"],
-        "Limit usuwanych wiadomości na kanał",
+        "Limit of deleted messages per channel",
     ),
     opt(
         "delete_pinned",
         Kind::Boolean,
         &["deletePinned"],
-        "Czy usuwać przypięte wiadomości",
+        "Whether to delete pinned messages",
     ),
     opt(
         "dry_run",
         Kind::Boolean,
         &["dryRun"],
-        "Tryb testowy bez usuwania",
+        "Test mode without deleting",
     ),
     opt(
         "log_channel",
         Kind::Channel,
         &["logChannelId"],
-        "Kanał logów AutoClean",
+        "AutoClean log channel",
     ),
     opt(
         "notify_enabled",
         Kind::Boolean,
         &["notifyBeforeDelete", "enabled"],
-        "Włącza ostrzeżenia przed czyszczeniem",
+        "Enables warnings before a cleanup",
     ),
     opt(
         "notify_minutes_before",
         Kind::Integer,
         &["notifyBeforeDelete", "minutesBefore"],
-        "Ile minut przed czyszczeniem wysłać ostrzeżenie",
+        "How many minutes before a cleanup to send a warning",
     ),
     opt(
         "notify_message",
         Kind::Str,
         &["notifyBeforeDelete", "message"],
-        "Treść ostrzeżenia przed czyszczeniem",
+        "Text of the pre-cleanup warning",
     ),
 ];
 
@@ -128,97 +128,97 @@ const AUTOMOD_OPTIONS: &[OptionDef] = &[
         "enabled",
         Kind::Boolean,
         &["automod", "enabled"],
-        "Włącza lub wyłącza AutoMod",
+        "Turns AutoMod on or off",
     ),
     opt(
         "log_channel",
         Kind::Channel,
         &["automod", "logChannelId"],
-        "Kanał logów AutoMod",
+        "AutoMod log channel",
     ),
     opt(
         "block_invites",
         Kind::Boolean,
         &["automod", "rules", "blockInvites"],
-        "Blokowanie linków zaproszeń Discord",
+        "Block Discord invite links",
     ),
     opt(
         "block_links",
         Kind::Boolean,
         &["automod", "rules", "blockLinks"],
-        "Blokowanie linków spoza allowlisty",
+        "Block links outside the allowlist",
     ),
     opt(
         "max_mentions",
         Kind::Integer,
         &["automod", "rules", "maxMentions"],
-        "Maksymalna liczba mentionów",
+        "Maximum number of mentions",
     ),
     opt(
         "caps_enabled",
         Kind::Boolean,
         &["automod", "rules", "caps", "enabled"],
-        "Włącza filtr caps spam",
+        "Enables the caps spam filter",
     ),
     opt(
         "caps_min_length",
         Kind::Integer,
         &["automod", "rules", "caps", "minLength"],
-        "Minimalna liczba liter dla caps spam",
+        "Minimum letters for caps spam",
     ),
     opt(
         "caps_ratio",
         Kind::Str,
         &["automod", "rules", "caps", "ratio"],
-        "Procent wielkich liter, np. 0.75",
+        "Share of capital letters, e.g. 0.75",
     ),
     opt(
         "duplicate_enabled",
         Kind::Boolean,
         &["automod", "rules", "duplicate", "enabled"],
-        "Włącza filtr duplikatów",
+        "Enables the duplicate filter",
     ),
     opt(
         "duplicate_window_seconds",
         Kind::Integer,
         &["automod", "rules", "duplicate", "windowSeconds"],
-        "Okno czasowe dla duplikatów",
+        "Time window for duplicates",
     ),
     opt(
         "duplicate_max_repeats",
         Kind::Integer,
         &["automod", "rules", "duplicate", "maxRepeats"],
-        "Maksymalna liczba powtórek",
+        "Maximum number of repeats",
     ),
     opt(
         "delete_message",
         Kind::Boolean,
         &["automod", "actions", "delete"],
-        "Czy usuwać wiadomość po trafieniu",
+        "Whether to delete the message on a match",
     ),
     opt(
         "timeout_minutes",
         Kind::Integer,
         &["automod", "actions", "timeoutMinutes"],
-        "Timeout po wykryciu naruszenia",
+        "Timeout after a violation",
     ),
     opt(
         "warn_in_channel",
         Kind::Boolean,
         &["automod", "actions", "warnInChannel"],
-        "Czy wysłać ostrzeżenie na kanale",
+        "Whether to send a warning in the channel",
     ),
     opt(
         "warn_template",
         Kind::Str,
         &["automod", "actions", "warnTemplate"],
-        "Template ostrzeżenia",
+        "Warning template",
     ),
     opt(
         "warn_delete_after_seconds",
         Kind::Integer,
         &["automod", "actions", "warnDeleteAfterSeconds"],
-        "Po ilu sekundach usunąć ostrzeżenie",
+        "Seconds before the warning is deleted",
     ),
 ];
 
@@ -227,21 +227,21 @@ const VERIFY_OPTIONS: &[OptionDef] = &[
         "enabled",
         Kind::Boolean,
         &[],
-        "Włącza lub wyłącza system verify",
+        "Turns the verify system on or off",
     ),
-    opt("role", Kind::Role, &[], "Rola nadawana po verify"),
-    opt("exceptions", Kind::Info, &[], "Lista wyjątków verify"),
+    opt("role", Kind::Role, &[], "Role given after verify"),
+    opt("exceptions", Kind::Info, &[], "Verify exception list"),
     opt(
         "exception_add",
         Kind::User,
         &[],
-        "Dodaje usera do wyjątków verify",
+        "Adds a user to the verify exceptions",
     ),
     opt(
         "exception_remove",
         Kind::User,
         &[],
-        "Usuwa usera z wyjątków verify",
+        "Removes a user from the verify exceptions",
     ),
 ];
 
@@ -272,9 +272,9 @@ fn normalize_option_key(value: &str) -> String {
 /// `formatValue`
 pub fn format_value(value: &Value) -> String {
     match value {
-        Value::Null => "brak".to_owned(),
-        Value::String(s) if s.is_empty() => "brak".to_owned(),
-        Value::Bool(b) => if *b { "tak" } else { "nie" }.to_owned(),
+        Value::Null => "none".to_owned(),
+        Value::String(s) if s.is_empty() => "none".to_owned(),
+        Value::Bool(b) => if *b { "yes" } else { "no" }.to_owned(),
         Value::Array(items) if items.is_empty() => "[]".to_owned(),
         Value::Array(items) => items
             .iter()
@@ -295,8 +295,8 @@ pub fn truncate_value(text: &str, max: usize) -> String {
         return text.to_owned();
     }
     format!(
-        "{}...[obcięto]",
-        String::from_utf16_lossy(&units[..max - 15])
+        "{}...[truncated]",
+        String::from_utf16_lossy(&units[..max.saturating_sub(14)])
     )
 }
 
@@ -314,7 +314,7 @@ fn num(cfg: &Value, path: &[&str]) -> Value {
 fn channel_mention(cfg: &Value, path: &[&str]) -> Value {
     match config::text(cfg, path) {
         Some(id) => json!(format!("<#{id}>")),
-        None => json!("brak"),
+        None => json!("none"),
     }
 }
 
@@ -337,7 +337,7 @@ fn verify_snapshot(app: &App, guild_id: &str) -> Vec<(&'static str, Value)> {
                 verify["roleId"]
                     .as_str()
                     .filter(|s| !s.is_empty())
-                    .map_or("brak".to_owned(), |r| format!("<@&{r}> ({r})"))
+                    .map_or("none".to_owned(), |r| format!("<@&{r}> ({r})"))
             ),
         ),
         (
@@ -346,22 +346,22 @@ fn verify_snapshot(app: &App, guild_id: &str) -> Vec<(&'static str, Value)> {
                 panel["channelId"]
                     .as_str()
                     .filter(|s| !s.is_empty())
-                    .map_or("brak".to_owned(), |c| format!("<#{c}> ({c})"))
+                    .map_or("none".to_owned(), |c| format!("<#{c}> ({c})"))
             ),
         ),
         (
             "panel_message_id",
-            json!(text_or(&panel["messageId"], "brak")),
+            json!(text_or(&panel["messageId"], "none")),
         ),
         (
             "panel_custom_id",
-            json!(text_or(&panel["customId"], "brak")),
+            json!(text_or(&panel["customId"], "none")),
         ),
         ("exceptions_count", json!(exceptions.len())),
         (
             "exceptions",
             json!(if exceptions.is_empty() {
-                "brak".to_owned()
+                "none".to_owned()
             } else {
                 exceptions
                     .iter()
@@ -375,7 +375,7 @@ fn verify_snapshot(app: &App, guild_id: &str) -> Vec<(&'static str, Value)> {
         ("active_lockouts", json!(count("lockouts"))),
         (
             "last_sweep",
-            json!(text_or(&verify["lastSweepAt"], "nigdy")),
+            json!(text_or(&verify["lastSweepAt"], "never")),
         ),
     ]
 }
@@ -537,14 +537,14 @@ fn format_option(section: &str, def: &OptionDef, value: &Value) -> String {
             if truthy(value) {
                 format!("<#{}>", config::js_string(value))
             } else {
-                "brak".to_owned()
+                "none".to_owned()
             }
         }
         ("verify", Kind::Role, _) => {
             if truthy(value) {
                 format!("<@&{}>", config::js_string(value))
             } else {
-                "brak".to_owned()
+                "none".to_owned()
             }
         }
         ("verify", _, "exceptions" | "exception_add" | "exception_remove") => {
@@ -555,7 +555,7 @@ fn format_option(section: &str, def: &OptionDef, value: &Value) -> String {
                 .map(config::js_string)
                 .collect();
             if ids.is_empty() {
-                "brak".to_owned()
+                "none".to_owned()
             } else {
                 ids.iter()
                     .map(|id| format!("<@{id}> ({id})"))
@@ -599,11 +599,13 @@ fn option_keys(options: &[OptionDef]) -> String {
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let Some(guild_id) = ix.guild_id() else {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("This command only works in a server.")
             .await;
     };
     if !ix.member_has(Permissions::ADMINISTRATOR) {
-        return ix.reply_ephemeral("Brak uprawnień Administratora.").await;
+        return ix
+            .reply_ephemeral("Administrator permission required.")
+            .await;
     }
     let guild = guild_id.to_string();
     let app = ix.app;
@@ -617,7 +619,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             return ix
                 .reply_ephemeral(config::format_config_error(
                     &error,
-                    "Nie można odczytać config.json. ",
+                    "Cannot read config.json. ",
                 ))
                 .await;
         }
@@ -636,29 +638,29 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         .map_or("n/a".to_owned(), |(_, v)| format_value(v));
                     json!({
                         "name": label,
-                        "value": format!("Status: {enabled}\nUżyj `/settings mode:show section:{key}`"),
+                        "value": format!("Status: {enabled}\nUse `/settings mode:show section:{key}`"),
                         "inline": false,
                     })
                 })
                 .collect();
             let mut e = embed(
                 "Operator Settings",
-                Some("Podgląd najważniejszych sekcji ustawień."),
+                Some("Overview of the main settings sections."),
                 fields,
             );
-            e["footer"] = json!({ "text": "Sekcje: autoclean, automod, verify" });
+            e["footer"] = json!({ "text": "Sections: autoclean, automod, verify" });
             return reply_embed(ix, e).await;
         };
         let Some((key, label, options)) = find_section(&section) else {
             return ix
-                .reply_ephemeral(format!("Nieznana sekcja: {section}"))
+                .reply_ephemeral(format!("Unknown section: {section}"))
                 .await;
         };
         if option_key.is_empty() {
             let snapshot = section_snapshot(app, key, &cfg, &guild);
             let e = embed(
                 &format!("{label} Settings"),
-                Some(&format!("Dostępne opcje: {}", option_keys(options))),
+                Some(&format!("Available options: {}", option_keys(options))),
                 snapshot_fields(&snapshot),
             );
             return reply_embed(ix, e).await;
@@ -670,25 +672,27 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .filter(|(_, kind)| discord::is_text_based(*kind));
             let Some((channel_id, _)) = channel else {
                 return ix
-                    .reply_ephemeral("Podaj `channel_value` albo użyj komendy na kanale tekstowym.")
+                    .reply_ephemeral(
+                        "Provide `channel_value` or run the command in a text channel.",
+                    )
                     .await;
             };
             let s = app
                 .autoclean
                 .effective_channel_settings(&channel_id.to_string(), None);
             let snapshot = vec![
-                ("enabled", json!(if s.enabled { "tak" } else { "nie" })),
+                ("enabled", json!(if s.enabled { "yes" } else { "no" })),
                 (
                     "delete_limit",
                     if s.delete_limit > 0 {
                         json!(s.delete_limit)
                     } else {
-                        json!("brak")
+                        json!("none")
                     },
                 ),
                 (
                     "delete_pinned",
-                    json!(if s.delete_pinned { "tak" } else { "nie" }),
+                    json!(if s.delete_pinned { "yes" } else { "no" }),
                 ),
                 (
                     "delete_messages_older_than_days",
@@ -707,7 +711,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             ];
             let e = embed(
                 "AutoClean Channel Settings",
-                Some(&format!("Kanał: <#{channel_id}>")),
+                Some(&format!("Channel: <#{channel_id}>")),
                 snapshot_fields(&snapshot),
             );
             return reply_embed(ix, e).await;
@@ -715,7 +719,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         let Some(def) = options.iter().find(|o| o.key == option_key) else {
             return ix
                 .reply_ephemeral(format!(
-                    "Nieznana opcja `{option_key}`. Dostępne: {}, channel_settings",
+                    "Unknown option `{option_key}`. Available: {}, channel_settings",
                     option_keys(options)
                 ))
                 .await;
@@ -726,8 +730,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             None,
             vec![
                 json!({ "name": "Typ", "value": truncate_value(def.kind.name(), 1024), "inline": true }),
-                json!({ "name": "Aktualnie", "value": truncate_value(&format_option(key, def, &current), 1024), "inline": true }),
-                json!({ "name": "Opis", "value": truncate_value(def.description, 1024), "inline": false }),
+                json!({ "name": "Current", "value": truncate_value(&format_option(key, def, &current), 1024), "inline": true }),
+                json!({ "name": "Description", "value": truncate_value(def.description, 1024), "inline": false }),
             ],
         );
         return reply_embed(ix, e).await;
@@ -735,24 +739,24 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
 
     if mode != "set" {
         return ix
-            .reply_ephemeral(format!("Nieznany mode settings: {mode}."))
+            .reply_ephemeral(format!("Unknown settings mode: {mode}."))
             .await;
     }
     let Some(section) = section else {
-        return ix.reply_ephemeral("Dla mode=set podaj `section`.").await;
+        return ix.reply_ephemeral("For mode=set, provide `section`.").await;
     };
     if option_key.is_empty() {
-        return ix.reply_ephemeral("Dla mode=set podaj `option`.").await;
+        return ix.reply_ephemeral("For mode=set, provide `option`.").await;
     }
     let Some((key, _, options)) = find_section(&section) else {
         return ix
-            .reply_ephemeral(format!("Nieznana sekcja: {section}"))
+            .reply_ephemeral(format!("Unknown section: {section}"))
             .await;
     };
     let Some(def) = options.iter().find(|o| o.key == option_key) else {
         return ix
             .reply_ephemeral(format!(
-                "Nieznana opcja `{option_key}`. Dostępne: {}",
+                "Unknown option `{option_key}`. Available: {}",
                 option_keys(options)
             ))
             .await;
@@ -763,21 +767,21 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         Kind::Boolean => opts
             .boolean("boolean_value")
             .map(Value::Bool)
-            .ok_or("Ta opcja wymaga `boolean_value`."),
+            .ok_or("This option needs `boolean_value`."),
         Kind::Integer => opts
             .integer("integer_value")
             .map(|v| json!(v))
-            .ok_or("Ta opcja wymaga `integer_value`."),
+            .ok_or("This option needs `integer_value`."),
         Kind::Str => {
             let raw = string_value.trim();
             if raw.is_empty() {
-                Err("Ta opcja wymaga `string_value`.")
+                Err("This option needs `string_value`.")
             } else if def.path == ["automod", "rules", "caps", "ratio"] {
                 match raw.parse::<f64>() {
                     Ok(parsed) if parsed.is_finite() && (0.0..=1.0).contains(&parsed) => {
                         Ok(json!(parsed))
                     }
-                    _ => Err("caps_ratio musi być liczbą od 0 do 1."),
+                    _ => Err("caps_ratio must be a number from 0 to 1."),
                 }
             } else {
                 Ok(json!(raw))
@@ -786,18 +790,18 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         Kind::Channel => match opts.channel("channel_value") {
             Some((id, _)) => Ok(json!(id.to_string())),
             None if string_value.trim().eq_ignore_ascii_case("clear") => Ok(json!("")),
-            None => Err("Ta opcja wymaga `channel_value` albo `string_value: clear`."),
+            None => Err("This option needs `channel_value` or `string_value: clear`."),
         },
         Kind::Role => match opts.role("role_value") {
             Some(role) => Ok(json!(role.id.to_string())),
             None if string_value.trim().eq_ignore_ascii_case("clear") => Ok(Value::Null),
-            None => Err("Ta opcja wymaga `role_value` albo `string_value: clear`."),
+            None => Err("This option needs `role_value` or `string_value: clear`."),
         },
         Kind::User => opts
             .user("user_value")
             .map(|u| json!(u.id.to_string()))
-            .ok_or("Ta opcja wymaga `user_value`."),
-        Kind::Info => Err("Nieobsługiwany typ opcji."),
+            .ok_or("This option needs `user_value`."),
+        Kind::Info => Err("Unsupported option type."),
     };
     let next = match next {
         Ok(next) => next,
@@ -835,7 +839,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             return ix
                 .reply_ephemeral(config::format_config_error(
                     &error,
-                    "Nie można zapisać config.json. ",
+                    "Cannot write config.json. ",
                 ))
                 .await;
         }
@@ -850,7 +854,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         return ix
             .reply_ephemeral(config::format_config_error(
                 &error,
-                "Ustawienie zapisano, ale moduł nie mógł przeładować configu. ",
+                "The setting was saved, but the module could not reload the config. ",
             ))
             .await;
     }
@@ -860,14 +864,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             return ix
                 .reply_ephemeral(config::format_config_error(
                     &error,
-                    "Ustawienie zapisano, ale nie udało się ponownie odczytać config.json. ",
+                    "The setting was saved, but config.json could not be read back. ",
                 ))
                 .await;
         }
     };
     let current = option_current(app, key, &updated, def, &guild);
     ix.reply_ephemeral(format!(
-        "Zmieniono `{section}.{option_key}` na: {}",
+        "Set `{section}.{option_key}` to: {}",
         format_option(key, def, &current)
     ))
     .await
@@ -886,15 +890,15 @@ mod tests {
 
     #[test]
     fn values_format_like_js() {
-        assert_eq!(format_value(&json!(true)), "tak");
-        assert_eq!(format_value(&json!("")), "brak");
+        assert_eq!(format_value(&json!(true)), "yes");
+        assert_eq!(format_value(&json!("")), "none");
         assert_eq!(format_value(&json!([1, "a"])), "1, a");
         assert_eq!(format_value(&json!([])), "[]");
         assert_eq!(
             truncate_value(&"x".repeat(1100), 1024)
                 .encode_utf16()
                 .count(),
-            1009 + 12
+            1024
         );
     }
 }

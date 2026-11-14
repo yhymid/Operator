@@ -11,7 +11,7 @@ use operator_common::time::parse_iso;
 /// `formatStoredDate(value, timezone)`
 pub fn format_stored_date(value: Option<&str>, timezone: &str) -> String {
     let Some(value) = value.filter(|v| !v.is_empty()) else {
-        return "brak".to_owned();
+        return "none".to_owned();
     };
     let Some(parsed) = parse_iso(value) else {
         return value.to_owned();
@@ -24,7 +24,7 @@ pub fn format_stored_date(value: Option<&str>, timezone: &str) -> String {
 
 fn format_permanent(channels: &[(String, u64, bool)]) -> String {
     if channels.is_empty() {
-        return "brak".to_owned();
+        return "none".to_owned();
     }
     channels
         .iter()
@@ -48,7 +48,7 @@ fn format_permanent(channels: &[(String, u64, bool)]) -> String {
 
 fn format_queued(entries: &[QueuedEntry], timezone: &str) -> String {
     if entries.is_empty() {
-        return "brak".to_owned();
+        return "none".to_owned();
     }
     entries
         .iter()
@@ -77,13 +77,11 @@ fn js_value_text(value: &Value, fallback: &str) -> String {
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let Some(guild_id) = ix.guild_id() else {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("This command only works in a server.")
             .await;
     };
     if !ix.app.is_owner(ix.user_id()) {
-        return ix
-            .reply_ephemeral("Ta komenda jest tylko dla ownera.")
-            .await;
+        return ix.reply_ephemeral("This command is owner-only.").await;
     }
     let guild = guild_id.to_string();
     let mode = ix.opts().lower("mode");
@@ -94,32 +92,29 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         let lines = [
             format!(
                 "AutoClean: {}",
-                if s.enabled { "wlaczony" } else { "wylaczony" }
+                if s.enabled { "enabled" } else { "disabled" }
             ),
             format!("CRON: {}", s.schedule),
             format!("Timezone: {}", s.timezone),
-            format!("Najbliższy cleanup: {}", s.next_run_text),
+            format!("Next cleanup: {}", s.next_run_text),
             format!(
                 "Next run cache: {}",
                 format_stored_date(s.next_run_at.as_deref(), &s.timezone)
             ),
-            format!("Dry run: {}", if s.dry_run { "tak" } else { "nie" }),
-            format!("Interwał: {}", s.interval_text),
-            format!(
-                "Minimalny wiek wiadomości: {} dni",
-                s.delete_older_than_days
-            ),
+            format!("Dry run: {}", if s.dry_run { "yes" } else { "no" }),
+            format!("Interval: {}", s.interval_text),
+            format!("Minimum message age: {} days", s.delete_older_than_days),
             format!(
                 "Delete limit: {}",
                 if s.delete_limit > 0 {
                     s.delete_limit.to_string()
                 } else {
-                    "brak".to_owned()
+                    "none".to_owned()
                 }
             ),
             format!(
                 "Delete pinned: {}",
-                if s.delete_pinned { "tak" } else { "nie" }
+                if s.delete_pinned { "yes" } else { "no" }
             ),
             format!("Whitelist users: {}", s.whitelist_users),
             format!("Whitelist roles: {}", s.whitelist_roles),
@@ -128,34 +123,31 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 "Log channel: {}",
                 s.log_channel_id
                     .as_deref()
-                    .map_or("brak".to_owned(), |c| format!("<#{c}>"))
+                    .map_or("none".to_owned(), |c| format!("<#{c}>"))
             ),
             format!(
-                "Stale kanały z configu ({}): {}",
+                "Permanent channels from config ({}): {}",
                 s.permanent_channels.len(),
                 format_permanent(&s.permanent_channels)
             ),
-            format!("Tymczasowo zakolejkowane ({}):", s.queued.len()),
+            format!("Queued one-time ({}):", s.queued.len()),
             format_queued(&s.queued, &s.timezone),
             format!(
-                "Ostatni cleanup: {}",
+                "Last cleanup: {}",
                 format_stored_date(s.last_run_at.as_deref(), &s.timezone)
             ),
             format!(
                 "Ostatni trigger: {}",
-                s.last_trigger.as_deref().unwrap_or("brak")
+                s.last_trigger.as_deref().unwrap_or("none")
             ),
-            format!("Ostatnio usunięte: {}", js_value_text(&s.last_deleted, "0")),
+            format!("Last deleted: {}", js_value_text(&s.last_deleted, "0")),
             format!(
-                "Ostatni czas wykonania: {} ms",
-                js_value_text(&s.last_duration_ms, "brak")
+                "Last run time: {} ms",
+                js_value_text(&s.last_duration_ms, "none")
             ),
-            format!(
-                "Ostatni błąd: {}",
-                s.last_error.as_deref().unwrap_or("brak")
-            ),
-            format!("Uruchomienia w tej sesji: {}", s.runs),
-            format!("Usunięte łącznie w tej sesji: {}", s.total_deleted),
+            format!("Last error: {}", s.last_error.as_deref().unwrap_or("none")),
+            format!("Runs in this session: {}", s.runs),
+            format!("Deleted in this session: {}", s.total_deleted),
         ];
         return ix.reply_ephemeral(lines.join("\n")).await;
     }
@@ -167,7 +159,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         .filter(|c| discord::is_text_based(c.kind));
     let Some(channel) = channel else {
         return ix
-            .reply_ephemeral("Ten kanał nie obsługuje wiadomości tekstowych.")
+            .reply_ephemeral("This channel does not support text messages.")
             .await;
     };
     let channel_id = channel.id;
@@ -183,18 +175,22 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let status = cleaner.status_snapshot(ix.app, &guild);
             let next = format_stored_date(status.next_run_at.as_deref(), &status.timezone);
             ix.reply_ephemeral(if already {
-                format!("Kanał <#{channel_id}> już czeka na jednorazowy cleanup. Najbliższy termin: {next}.")
+                format!(
+                    "<#{channel_id}> is already queued for a one-time cleanup. Next run: {next}."
+                )
             } else {
-                format!("Dodano <#{channel_id}> do jednorazowego cleanupu przy najbliższym terminie. Najbliższy termin: {next}.")
+                format!(
+                    "Added <#{channel_id}> to a one-time cleanup at the next run. Next run: {next}."
+                )
             })
             .await
         }
         "reset" => {
             let removed = cleaner.reset_queued_channel(ix.app, &guild, &channel_id.to_string());
             ix.reply_ephemeral(if removed {
-                format!("Usunięto <#{channel_id}> z kolejki jednorazowego cleanupu.")
+                format!("Removed <#{channel_id}> from the one-time cleanup queue.")
             } else {
-                format!("Kanał <#{channel_id}> nie był zakolejkowany do jednorazowego cleanupu.")
+                format!("<#{channel_id}> was not queued for a one-time cleanup.")
             })
             .await
         }
@@ -205,14 +201,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .await
             {
                 None => {
-                    ix.edit_content("Czyszczenie już trwa. Spróbuj ponownie za chwilę.")
+                    ix.edit_content("A cleanup is already running. Try again in a moment.")
                         .await
                 }
                 Some(result) => match result.error {
-                    Some(error) => ix.edit_content(format!("Błąd czyszczenia: {error}")).await,
+                    Some(error) => ix.edit_content(format!("Cleanup error: {error}")).await,
                     None => {
                         ix.edit_content(format!(
-                            "Wyczyszczono kanał <#{channel_id}>. Usunięto {} wiadomości.",
+                            "Cleaned <#{channel_id}>. Deleted {} messages.",
                             result.deleted
                         ))
                         .await
@@ -221,7 +217,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             }
         }
         _ => {
-            ix.reply_ephemeral(format!("Nieznany mode clean: {mode}."))
+            ix.reply_ephemeral(format!("Unknown clean mode: {mode}."))
                 .await
         }
     }

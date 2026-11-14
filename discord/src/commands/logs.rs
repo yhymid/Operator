@@ -75,7 +75,7 @@ fn status_lines(state: &LogsState, channel_status: Option<&str>) -> Vec<String> 
             "Enabled categories ({}/{}): {}",
             enabled.len(),
             total_categories(),
-            format_category_list(&enabled, "brak")
+            format_category_list(&enabled, "none")
         ),
         format!(
             "Disabled categories: {}",
@@ -86,11 +86,11 @@ fn status_lines(state: &LogsState, channel_status: Option<&str>) -> Vec<String> 
     ]);
     lines.extend(
         [
-            "`/logs mode:setup channel:#kanał`",
+            "`/logs mode:setup channel:#channel`",
             "`/logs mode:status`",
             "`/logs mode:enable`",
             "`/logs mode:disable`",
-            "`/logs mode:channel channel:#kanał`",
+            "`/logs mode:channel channel:#channel`",
             "`/logs mode:retention retention_days:30`",
             "`/logs mode:include_bots value:true|false`",
             "`/logs mode:categories`",
@@ -113,14 +113,14 @@ fn categories_lines(state: &LogsState) -> Vec<String> {
             "Enabled ({}/{}): {}",
             enabled.len(),
             total_categories(),
-            format_category_list(&enabled, "brak")
+            format_category_list(&enabled, "none")
         ),
         format!(
             "Disabled: {}",
             format_category_list(&disabled_list(state), "none")
         ),
         String::new(),
-        "Przykłady:".to_owned(),
+        "Examples:".to_owned(),
         "`/logs mode:categories category:message value:false`".to_owned(),
         "`/logs mode:categories category:voice value:true`".to_owned(),
         "`/logs mode:categories category:all value:true`".to_owned(),
@@ -136,13 +136,16 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         return ix
             .reply(panel(
                 "Logs",
-                &lines(&["Ta komenda dziala tylko na serwerze."]),
+                &lines(&["This command only works in a server."]),
             ))
             .await;
     };
     if !ix.member_has(Permissions::ADMINISTRATOR) {
         return ix
-            .reply(panel("Logs", &lines(&["Brak uprawnień Administratora."])))
+            .reply(panel(
+                "Logs",
+                &lines(&["Administrator permission required."]),
+            ))
             .await;
     }
     let app = ix.app;
@@ -162,7 +165,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Setup",
-                        &lines(&["Wybrany kanał nie obsługuje wiadomości tekstowych."]),
+                        &lines(&["The selected channel does not support text messages."]),
                     ))
                     .await;
             };
@@ -258,7 +261,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Channel",
-                        &lines(&["Wybrany kanał nie obsługuje wiadomości tekstowych."]),
+                        &lines(&["The selected channel does not support text messages."]),
                     ))
                     .await;
             };
@@ -276,7 +279,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Retention",
                         &[format!(
-                            "Podaj `retention_days` ({MIN_RETENTION_DAYS}-{MAX_RETENTION_DAYS})."
+                            "Provide `retention_days` ({MIN_RETENTION_DAYS}-{MAX_RETENTION_DAYS})."
                         )],
                     ))
                     .await;
@@ -286,7 +289,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 .save_logs(&guild, json!({ "retentionDays": retention }));
             ix.reply(panel(
                 "Logs Retention",
-                &[format!("Retention ustawiony na **{retention}** dni.")],
+                &[format!("Retention set to **{retention}** days.")],
             ))
             .await
         }
@@ -295,7 +298,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Include Bots",
-                        &lines(&["Podaj `value:true` albo `value:false`."]),
+                        &lines(&["Provide `value:true` or `value:false`."]),
                     ))
                     .await;
             };
@@ -322,8 +325,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Categories",
                         &lines(&[
-                            "Aby zmienić kategorię, podaj oba pola: `category` i `value`.",
-                            "`value:true` włącza kategorię, `value:false` ją wyłącza.",
+                            "To change a category, provide both `category` and `value`.",
+                            "`value:true` enables the category, `value:false` disables it.",
                         ]),
                     ))
                     .await;
@@ -334,8 +337,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         .reply(panel(
                             "Logs Categories",
                             &lines(&[
-                                "Dla `category:all` użyj tylko `value:true`, aby włączyć wszystkie kategorie.",
-                                "Jeśli chcesz wyłączyć wszystko, użyj `/logs mode:disable`.",
+                                "For `category:all`, use only `value:true` to enable all categories.",
+                                "To turn everything off, use `/logs mode:disable`.",
                             ]),
                         ))
                         .await;
@@ -343,7 +346,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 app.state
                     .save_logs(&guild, json!({ "disabledCategories": [] }));
                 let next = resolve_logs_state(app, &guild);
-                let mut out = vec!["Włączono wszystkie kategorie logów.".to_owned()];
+                let mut out = vec!["Enabled all log categories.".to_owned()];
                 out.extend(categories_lines(&next));
                 return ix.reply(panel("Logs Categories", &out)).await;
             }
@@ -352,9 +355,9 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Categories",
                         &[
-                            format!("Nieznana kategoria: `{category}`."),
+                            format!("Unknown category: `{category}`."),
                             format!(
-                                "Dostępne: {}",
+                                "Available: {}",
                                 category_keys().collect::<Vec<_>>().join(", ")
                             ),
                         ],
@@ -377,8 +380,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Categories",
                         &lines(&[
-                            "Nie można wyłączyć wszystkich kategorii naraz.",
-                            "Zostaw przynajmniej jedną aktywną albo użyj `/logs mode:disable`.",
+                            "You cannot disable all categories at once.",
+                            "Keep at least one enabled or use `/logs mode:disable`.",
                         ]),
                     ))
                     .await;
@@ -388,8 +391,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let next = resolve_logs_state(app, &guild);
             let label = category_meta(&category).map_or(category.as_str(), |(label, _)| label);
             let mut out = vec![format!(
-                "{} kategorie **{label}**.",
-                if value { "Wlaczono" } else { "Wylaczono" }
+                "{} category **{label}**.",
+                if value { "Enabled" } else { "Disabled" }
             )];
             out.extend(categories_lines(&next));
             ix.reply(panel("Logs Categories", &out)).await
@@ -404,34 +407,27 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Export",
-                        &lines(&["Podaj `day` w formacie `YYYY-MM-DD`."]),
+                        &lines(&["Provide `day` as `YYYY-MM-DD`."]),
                     ))
                     .await;
             }
             let exported = app.fulllogs.export_day(guild_id, &day).await;
             match exported {
                 Ok(None) => {
-                    ix.reply(panel(
-                        "Logs Export",
-                        &[format!("Brak logu dla dnia `{day}`.")],
-                    ))
-                    .await
+                    ix.reply(panel("Logs Export", &[format!("No log for `{day}`.")]))
+                        .await
                 }
                 Ok(Some((path, name))) => {
                     // A day of logs can be many MB: acknowledge first, then upload.
                     ix.defer(true).await?;
                     match tokio::fs::read(&path).await {
                         Ok(bytes) => {
-                            ix.edit_with_file(
-                                &format!("Eksport dnia `{day}` gotowy."),
-                                &name,
-                                bytes,
-                            )
-                            .await
+                            ix.edit_with_file(&format!("Export of `{day}` is ready."), &name, bytes)
+                                .await
                         }
                         Err(error) => {
                             ix.edit_content(format!(
-                                "Nie udało się wyeksportować logu: {}",
+                                "Could not export the log: {}",
                                 inline(&error.to_string(), 220)
                             ))
                             .await
@@ -442,7 +438,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     ix.reply(panel(
                         "Logs Export",
                         &[format!(
-                            "Nie udało się wyeksportować logu: {}",
+                            "Could not export the log: {}",
                             inline(&discord::err_text(&error), 220)
                         )],
                     ))
@@ -458,8 +454,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Purge",
                         &lines(&[
-                            "Purge wymaga jawnego potwierdzenia `confirm:true`.",
-                            "Przykłady:",
+                            "Purge requires explicit confirmation `confirm:true`.",
+                            "Examples:",
                             "`/logs mode:purge day:2026-06-02 confirm:true`",
                             "`/logs mode:purge older_than_days:30 confirm:true`",
                         ]),
@@ -470,7 +466,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Purge",
-                        &lines(&["Podaj `day` albo `older_than_days`."]),
+                        &lines(&["Provide `day` or `older_than_days`."]),
                     ))
                     .await;
             }
@@ -478,7 +474,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 return ix
                     .reply(panel(
                         "Logs Purge",
-                        &lines(&["W jednym purge wybierz tylko jeden zakres: `day` albo `older_than_days`."]),
+                        &lines(&["Choose only one range per purge: `day` or `older_than_days`."]),
                     ))
                     .await;
             }
@@ -486,7 +482,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             match app.fulllogs.purge(guild_id, day_opt, older).await {
                 Ok(removed) => {
                     let preview = if removed.is_empty() {
-                        "brak".to_owned()
+                        "none".to_owned()
                     } else {
                         removed
                             .iter()
@@ -498,24 +494,21 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     let mut out = vec![
                         if day_opt.is_some() {
                             if removed.is_empty() {
-                                format!("Nie znaleziono logu dla dnia: `{day}`.")
+                                format!("No log found for: `{day}`.")
                             } else {
-                                format!("Usunięto wpis dla dnia: `{day}`.")
+                                format!("Deleted the log for: `{day}`.")
                             }
                         } else {
                             format!(
-                                "Usunięto logi starsze niż **{}** dni.",
+                                "Deleted logs older than **{}** days.",
                                 older.unwrap_or(1).max(1)
                             )
                         },
-                        format!("Liczba usuniętych plików: **{}**", removed.len()),
-                        format!("Zakres usuniętych dni: {preview}"),
+                        format!("Deleted files: **{}**", removed.len()),
+                        format!("Deleted days: {preview}"),
                     ];
                     if removed.len() > 10 {
-                        out.push(format!(
-                            "... i jeszcze {} kolejnych dni.",
-                            removed.len() - 10
-                        ));
+                        out.push(format!("... and {} more days.", removed.len() - 10));
                     }
                     ix.reply(panel("Logs Purge", &out)).await
                 }
@@ -523,7 +516,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     ix.reply(panel(
                         "Logs Purge",
                         &[format!(
-                            "Purge nie powiódł się: {}",
+                            "Purge failed: {}",
                             inline(&discord::err_text(&error), 220)
                         )],
                     ))
@@ -538,8 +531,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Test",
                         &lines(&[
-                            "Najpierw ustaw kanał i włącz logs:",
-                            "`/logs mode:setup channel:#kanał`",
+                            "First set a channel and enable logs:",
+                            "`/logs mode:setup channel:#channel`",
                         ]),
                     ))
                     .await;
@@ -548,14 +541,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             ix.reply(panel(
                 "Logs Test",
                 &[
-                    format!("Wysłałem test wpis na <#{channel}>."),
-                    "Sprawdź czy karta Components v2 jest czytelna.".to_owned(),
+                    format!("Sent a test entry to <#{channel}>."),
+                    "Check that the Components v2 card is readable.".to_owned(),
                 ],
             ))
             .await
         }
         _ => {
-            ix.reply(panel("Logs", &[format!("Nieznany mode: `{mode}`.")]))
+            ix.reply(panel("Logs", &[format!("Unknown mode: `{mode}`.")]))
                 .await
         }
     }

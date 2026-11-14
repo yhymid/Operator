@@ -258,7 +258,7 @@ impl MusicManager {
         position: i64,
     ) -> Result<Option<PublicTrack>> {
         if position <= 0 {
-            bail!("Pozycja w kolejce musi być liczbą >= 1.");
+            bail!("The queue position must be a number >= 1.");
         }
         let mut players = self.players.lock().await;
         let Some(player) = players.get_mut(&guild_id).filter(|p| p.has_music()) else {
@@ -394,8 +394,7 @@ impl MusicManager {
             };
             player.voice_channel_id
         };
-        let channel =
-            channel.ok_or_else(|| anyhow!("Brak zapisanego kanału głosowego dla tej sesji."))?;
+        let channel = channel.ok_or_else(|| anyhow!("No saved voice channel for this session."))?;
         let node = self.node()?;
         if !node.connected() {
             node.reconnect_now();
@@ -404,7 +403,7 @@ impl MusicManager {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
             if !node.connected() {
-                bail!("Lavalink node nadal jest offline po próbie reconnect.");
+                bail!("The Lavalink node is still offline after the reconnect attempt.");
             }
         }
         if let Some(player) = self.players.lock().await.get_mut(&guild_id) {

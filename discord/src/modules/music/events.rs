@@ -252,7 +252,7 @@ impl MusicManager {
         let title = or_unknown(info_str(&next, "title")).to_owned();
         if let Some(player) = self.players.lock().await.get_mut(&guild_id) {
             player.tracks.push_back(next);
-            tracing::info!("Autoplay dodal utwor guild={guild_id} title=\"{title}\"");
+            tracing::info!("Autoplay added a track guild={guild_id} title=\"{title}\"");
         }
     }
 

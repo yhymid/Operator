@@ -96,7 +96,7 @@ pub async fn sync_guilds(
     details.extend(missing.iter().map(|id| SyncDetail {
         guild_id: id.clone(),
         guild_name: "unknown".to_owned(),
-        error: Some("Bot nie widzi tego serwera albo nie jest na nim obecny.".to_owned()),
+        error: Some("The bot cannot see this server or is not a member of it.".to_owned()),
     }));
     SyncReport::Guild {
         payload_count: payload_len(),
@@ -124,12 +124,10 @@ pub async fn sync_global(
 pub fn format_report(report: &SyncReport) -> Vec<String> {
     match report {
         SyncReport::Global { cleared: true, .. } => {
-            vec!["Globalne komendy zostały wyczyszczone.".to_owned()]
+            vec!["Global commands were cleared.".to_owned()]
         }
         SyncReport::Global { command_count, .. } => {
-            vec![format!(
-                "Globalne komendy zsynchronizowane: {command_count}."
-            )]
+            vec![format!("Global commands synced: {command_count}.")]
         }
         SyncReport::Guild {
             payload_count,
@@ -137,7 +135,7 @@ pub fn format_report(report: &SyncReport) -> Vec<String> {
         } => {
             let fail = report.failures();
             let mut lines = vec![format!(
-                "Guild sync: komend={payload_count}, serwerów={}, sukces={}, błędy={fail}",
+                "Guild sync: commands={payload_count}, servers={}, ok={}, errors={fail}",
                 details.len(),
                 details.len() - fail
             )];
@@ -156,7 +154,7 @@ pub async fn register_on_startup(app: &SharedApp) {
     if !app.paths.sync_commands_on_startup {
         if app.startup_verbose {
             tracing::info!(
-                "Pomijam sync slash commands na starcie (OPERATOR_SYNC_COMMANDS_ON_STARTUP=0)."
+                "Skipping slash command sync on startup (OPERATOR_SYNC_COMMANDS_ON_STARTUP=0)."
             );
         }
         return;
@@ -191,7 +189,7 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
                 tracing::error!("Component interaction error: {}", discord::err_text(&error));
                 if !ix.replied() && !ix.deferred() {
                     let _ = ix
-                        .reply_ephemeral("Wystąpił błąd podczas obsługi panelu.")
+                        .reply_ephemeral("An error occurred while handling the panel.")
                         .await;
                 }
             }
@@ -201,7 +199,7 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
                 tracing::error!("Verify captcha modal error: {}", discord::err_text(&error));
                 if !ix.replied() && !ix.deferred() {
                     let _ = ix
-                        .reply_ephemeral("Wystąpił błąd podczas sprawdzania captcha.")
+                        .reply_ephemeral("An error occurred while checking the captcha.")
                         .await;
                 }
             }
@@ -221,7 +219,7 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
         InteractionType::ApplicationCommand => {
             if let Err(error) = dispatch_command(&ix).await {
                 tracing::error!("Interaction error: {}", discord::err_text(&error));
-                let text = "Wystąpił błąd podczas wykonywania komendy.";
+                let text = "An error occurred while running the command.";
                 let _ = if !ix.replied() && !ix.deferred() {
                     ix.reply_ephemeral(text).await
                 } else {
@@ -361,7 +359,7 @@ mod tests {
         assert_eq!(
             format_report(&report),
             [
-                "Guild sync: komend=12, serwerów=2, sukces=1, błędy=1",
+                "Guild sync: commands=12, servers=2, ok=1, errors=1",
                 "- B (2): x"
             ]
         );

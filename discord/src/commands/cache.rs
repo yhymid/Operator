@@ -12,34 +12,34 @@ fn is_snowflake_like(value: &str) -> bool {
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     if !ix.in_guild() {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("This command only works in a server.")
             .await;
     }
     if !ix.app.is_owner(ix.user_id()) {
-        return ix
-            .reply_ephemeral("Ta komenda jest tylko dla ownera.")
-            .await;
+        return ix.reply_ephemeral("This command is owner-only.").await;
     }
     let opts = ix.opts();
     let mode = opts.lower("mode");
     if mode != "serverinfo" {
         return ix
-            .reply_ephemeral(format!("Nieznany mode cache: {mode}."))
+            .reply_ephemeral(format!("Unknown cache mode: {mode}."))
             .await;
     }
     let id = opts.string("id").unwrap_or_default().trim().to_owned();
     if id.is_empty() {
-        return ix.reply_ephemeral("Dla mode=serverinfo podaj `id`.").await;
+        return ix
+            .reply_ephemeral("For mode=serverinfo, provide `id`.")
+            .await;
     }
     if !is_snowflake_like(&id) {
         return ix
-            .reply_ephemeral("Niepoprawne ID. Podaj poprawny Discord ID (cyfry).")
+            .reply_ephemeral("Invalid ID. Provide a valid Discord ID (digits).")
             .await;
     }
     let path = ix.app.paths.server_cache_dir.join(format!("{id}.json"));
     if !path.exists() {
         return ix
-            .reply_ephemeral(format!("Brak cache dla ID `{id}` ({}).", path.display()))
+            .reply_ephemeral(format!("No cache for ID `{id}` ({}).", path.display()))
             .await;
     }
     let pretty = std::fs::read_to_string(&path)
@@ -57,7 +57,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                 discord::err_text(&error)
             );
             return ix
-                .reply_ephemeral(format!("Nie udało się odczytać cache dla ID `{id}`."))
+                .reply_ephemeral(format!("Could not read the cache for ID `{id}`."))
                 .await;
         }
     };
@@ -66,7 +66,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         return ix.reply_ephemeral(wrapped).await;
     }
     ix.reply_ephemeral_file(
-        &format!("Cache jest za długi na wiadomość. Wysyłam plik `server-{id}.json`."),
+        &format!("The cache is too long for a message. Sending `server-{id}.json` as a file."),
         &format!("server-{id}.json"),
         pretty.into_bytes(),
     )

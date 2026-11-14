@@ -2,20 +2,20 @@
   {
     "options": [],
     "name": "help",
-    "description": "Lista komend",
+    "description": "List of commands",
     "dm_permission": false,
     "type": 1
   },
   {
     "name": "settings",
-    "description": "Pokazuje i zmienia ustawienia operatora",
+    "description": "Shows and changes the bot settings",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Tryb komendy settings",
+        "description": "settings command mode",
         "required": true,
         "choices": [
           {
@@ -31,7 +31,7 @@
       {
         "type": 3,
         "name": "section",
-        "description": "Sekcja ustawień",
+        "description": "Settings section",
         "required": false,
         "choices": [
           {
@@ -51,57 +51,57 @@
       {
         "type": 3,
         "name": "option",
-        "description": "Klucz opcji, np. dry_run lub enabled",
+        "description": "Option key, e.g. dry_run or enabled",
         "required": false
       },
       {
         "type": 3,
         "name": "string_value",
-        "description": "Wartość tekstowa albo \"clear\"",
+        "description": "Text value or \"clear\"",
         "required": false
       },
       {
         "type": 4,
         "name": "integer_value",
-        "description": "Wartość liczbowa",
+        "description": "Number value",
         "required": false
       },
       {
         "type": 5,
         "name": "boolean_value",
-        "description": "Wartość true/false",
+        "description": "true/false value",
         "required": false
       },
       {
         "type": 7,
         "name": "channel_value",
-        "description": "Wartość kanału lub kanał dla podglądu channel_settings",
+        "description": "Channel value, or the channel for the channel_settings preview",
         "required": false
       },
       {
         "type": 8,
         "name": "role_value",
-        "description": "Wartość roli",
+        "description": "Role value",
         "required": false
       },
       {
         "type": 6,
         "name": "user_value",
-        "description": "Wartość użytkownika",
+        "description": "User value",
         "required": false
       }
     ]
   },
   {
     "name": "clean",
-    "description": "Komendy czyszczenia",
+    "description": "Cleanup commands",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Tryb komendy clean",
+        "description": "clean command mode",
         "required": true,
         "choices": [
           {
@@ -126,14 +126,14 @@
   },
   {
     "name": "cache",
-    "description": "Narzędzia cache",
+    "description": "Cache tools",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Tryb komendy cache",
+        "description": "cache command mode",
         "required": true,
         "choices": [
           {
@@ -145,88 +145,88 @@
       {
         "type": 3,
         "name": "id",
-        "description": "Guild ID (np. 1008460463148900373)",
+        "description": "Guild ID (e.g. 1008460463148900373)",
         "required": false
       }
     ]
   },
   {
     "name": "play",
-    "description": "Odtwarza utwór, playlistę lub plik audio",
+    "description": "Plays a track, playlist or audio file",
     "dm_permission": false,
     "options": [
       {
         "type": 3,
         "name": "query",
-        "description": "Link lub fraza (YouTube/SoundCloud/Spotify/radio)",
+        "description": "Link or search phrase (YouTube/SoundCloud/Spotify/radio)",
         "required": false
       },
       {
         "type": 11,
         "name": "audio",
-        "description": "Plik audio wrzucony na Discorda",
+        "description": "Audio file uploaded to Discord",
         "required": false
       }
     ]
   },
   {
     "name": "pause",
-    "description": "Wstrzymuje odtwarzanie",
+    "description": "Pauses playback",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "resume",
-    "description": "Wznawia odtwarzanie",
+    "description": "Resumes playback",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "skip",
-    "description": "Pomija aktualny utwór",
+    "description": "Skips the current track",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "stop",
-    "description": "Zatrzymuje muzykę, czyści kolejkę i rozłącza bota",
+    "description": "Stops the music, clears the queue and disconnects the bot",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "queue",
-    "description": "Pokazuje kolejkę",
+    "description": "Shows the queue",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "nowplaying",
-    "description": "Panel aktualnego utworu (przyciski, EQ, FX)",
+    "description": "Now playing panel (buttons, EQ, FX)",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "volume",
-    "description": "Ustawia głośność",
+    "description": "Sets the volume",
     "dm_permission": false,
     "options": [
       {
         "type": 4,
         "name": "value",
-        "description": "Zmiana głośności, np. 10 albo -10",
+        "description": "Volume change, e.g. 10 or -10",
         "required": true
       }
     ]
   },
   {
     "name": "remove",
-    "description": "Usuwa utwór z kolejki",
+    "description": "Removes a track from the queue",
     "dm_permission": false,
     "options": [
       {
         "type": 4,
         "name": "position",
-        "description": "Pozycja w kolejce (1 = pierwszy po aktualnym)",
+        "description": "Queue position (1 = next after the current one)",
         "required": true,
         "min_value": 1
       }
@@ -234,20 +234,20 @@
   },
   {
     "name": "move",
-    "description": "Przenosi utwór w kolejce",
+    "description": "Moves a track in the queue",
     "dm_permission": false,
     "options": [
       {
         "type": 4,
         "name": "from",
-        "description": "Obecna pozycja",
+        "description": "Current position",
         "required": true,
         "min_value": 1
       },
       {
         "type": 4,
         "name": "to",
-        "description": "Nowa pozycja",
+        "description": "New position",
         "required": true,
         "min_value": 1
       }
@@ -255,44 +255,44 @@
   },
   {
     "name": "seek",
-    "description": "Przewija aktualny utwór",
+    "description": "Seeks in the current track",
     "dm_permission": false,
     "options": [
       {
         "type": 3,
         "name": "time",
-        "description": "Czas, np. 1:30 albo 90",
+        "description": "Time, e.g. 1:30 or 90",
         "required": true
       }
     ]
   },
   {
     "name": "clear",
-    "description": "Czyści kolejkę (aktualny utwór gra dalej)",
+    "description": "Clears the queue (the current track keeps playing)",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "loop",
-    "description": "Powtarzanie: wyłączone, utwór albo kolejka",
+    "description": "Repeat: off, track or queue",
     "dm_permission": false,
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Bez wyboru przełącza po kolei",
+        "description": "Without a choice it cycles through the modes",
         "required": false,
         "choices": [
           {
-            "name": "wyłączone",
+            "name": "off",
             "value": "off"
           },
           {
-            "name": "utwór",
+            "name": "track",
             "value": "track"
           },
           {
-            "name": "kolejka",
+            "name": "queue",
             "value": "queue"
           }
         ]
@@ -301,20 +301,20 @@
   },
   {
     "name": "reconnect",
-    "description": "Ponownie łączy bota z kanałem głosowym i Lavalinkiem",
+    "description": "Reconnects the bot to the voice channel and Lavalink",
     "dm_permission": false,
     "options": []
   },
   {
     "name": "verify",
-    "description": "Panel i status weryfikacji",
+    "description": "Verification panel and status",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Tryb komendy verify",
+        "description": "verify command mode",
         "required": true,
         "choices": [
           {
@@ -349,20 +349,20 @@
       },
       {
         "type": 8,
-        "name": "rola",
-        "description": "Rola zweryfikowanego (dla mode=setup)",
+        "name": "role",
+        "description": "Verified role (for mode=setup)",
         "required": false
       },
       {
         "type": 6,
         "name": "user",
-        "description": "Użytkownik dla exception_add/exception_remove/expire_user",
+        "description": "User for exception_add/exception_remove/expire_user",
         "required": false
       },
       {
         "type": 7,
         "name": "channel",
-        "description": "Kanał panelu dla setup/resend_panel",
+        "description": "Panel channel for setup/resend_panel",
         "required": false,
         "channel_types": [
           0,
@@ -373,30 +373,30 @@
   },
   {
     "name": "automod",
-    "description": "Status i zarządzanie AutoMod",
+    "description": "AutoMod status and management",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 1,
         "name": "status",
-        "description": "Pokazuje status AutoMod"
+        "description": "Shows the AutoMod status"
       },
       {
         "type": 1,
         "name": "test",
-        "description": "Sprawdza czy treść wpada w regułę AutoMod",
+        "description": "Checks whether content matches an AutoMod rule",
         "options": [
           {
             "type": 3,
             "name": "content",
-            "description": "Treść do sprawdzenia",
+            "description": "Content to check",
             "required": true
           },
           {
             "type": 3,
             "name": "type",
-            "description": "Test aktywnych reguł albo konkretnej kandydatki",
+            "description": "Test the active rules or a specific candidate",
             "required": false,
             "choices": [
               {
@@ -416,7 +416,7 @@
           {
             "type": 3,
             "name": "value",
-            "description": "Wartość konkretnej reguły dla word/regex",
+            "description": "Value of a specific word/regex rule",
             "required": false
           }
         ]
@@ -424,17 +424,17 @@
       {
         "type": 2,
         "name": "rule",
-        "description": "Zarządzanie listami reguł AutoMod",
+        "description": "Manage AutoMod rule lists",
         "options": [
           {
             "type": 1,
             "name": "list",
-            "description": "Listuje zapisane reguły",
+            "description": "Lists the saved rules",
             "options": [
               {
                 "type": 3,
                 "name": "type",
-                "description": "Pokazuje wybraną grupę reguł albo wszystko",
+                "description": "Shows the chosen rule group or everything",
                 "required": false,
                 "choices": [
                   {
@@ -460,12 +460,12 @@
           {
             "type": 1,
             "name": "add",
-            "description": "Dodaje nową regułę do configu",
+            "description": "Adds a new rule to the config",
             "options": [
               {
                 "type": 3,
                 "name": "type",
-                "description": "Typ reguły",
+                "description": "Rule type",
                 "required": true,
                 "choices": [
                   {
@@ -485,7 +485,7 @@
               {
                 "type": 3,
                 "name": "value",
-                "description": "Wartość reguły",
+                "description": "Rule value",
                 "required": true
               }
             ]
@@ -493,12 +493,12 @@
           {
             "type": 1,
             "name": "remove",
-            "description": "Usuwa regułę z configu",
+            "description": "Removes a rule from the config",
             "options": [
               {
                 "type": 3,
                 "name": "type",
-                "description": "Typ reguły",
+                "description": "Rule type",
                 "required": true,
                 "choices": [
                   {
@@ -518,7 +518,7 @@
               {
                 "type": 3,
                 "name": "value",
-                "description": "Wartość reguły",
+                "description": "Rule value",
                 "required": true
               }
             ]
@@ -529,14 +529,14 @@
   },
   {
     "name": "announce",
-    "description": "Planowanie ogłoszeń przez webhook",
+    "description": "Schedule announcements via webhook",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Tryb komendy announce",
+        "description": "announce command mode",
         "required": true,
         "choices": [
           {
@@ -580,40 +580,40 @@
       {
         "type": 3,
         "name": "datetime",
-        "description": "Data i godzina (czas polski), np. 2026-04-20 18:30",
+        "description": "Date and time (Polish time), e.g. 2026-04-20 18:30",
         "required": false
       },
       {
         "type": 3,
         "name": "content",
-        "description": "Treść ogłoszenia",
+        "description": "Announcement content",
         "required": false
       },
       {
         "type": 3,
         "name": "profile",
-        "description": "Preset profilu (dla create/now)",
+        "description": "Profile preset (for create/now)",
         "required": false,
         "autocomplete": true
       },
       {
         "type": 3,
         "name": "name",
-        "description": "Nazwa profilu (dla profile_*)",
+        "description": "Profile name (for profile_*)",
         "required": false,
         "autocomplete": true
       },
       {
         "type": 3,
         "name": "id",
-        "description": "ID/kod ogłoszenia (dla edit/delete)",
+        "description": "Announcement ID/code (for edit/delete)",
         "required": false,
         "autocomplete": true
       },
       {
         "type": 3,
         "name": "send_mode",
-        "description": "Jak wysłać announcement",
+        "description": "How to send the announcement",
         "required": false,
         "choices": [
           {
@@ -633,7 +633,7 @@
       {
         "type": 7,
         "name": "channel",
-        "description": "Kanał docelowy",
+        "description": "Target channel",
         "required": false,
         "channel_types": [
           0,
@@ -643,51 +643,51 @@
       {
         "type": 3,
         "name": "title",
-        "description": "Tytuł embeda",
+        "description": "Embed title",
         "required": false
       },
       {
         "type": 3,
         "name": "color",
-        "description": "Kolor embeda, np. #2F9E44",
+        "description": "Embed color, e.g. #2F9E44",
         "required": false
       },
       {
         "type": 3,
         "name": "username",
-        "description": "Nazwa webhooka",
+        "description": "Webhook name",
         "required": false
       },
       {
         "type": 3,
         "name": "avatar_url",
-        "description": "Avatar webhooka (URL)",
+        "description": "Webhook avatar (URL)",
         "required": false
       },
       {
         "type": 3,
         "name": "button_label",
-        "description": "Label przycisku dla components",
+        "description": "Button label for components",
         "required": false
       },
       {
         "type": 3,
         "name": "button_url",
-        "description": "URL przycisku dla components",
+        "description": "Button URL for components",
         "required": false
       }
     ]
   },
   {
     "name": "logs",
-    "description": "Pełne logi serwera i konfiguracja kanału logów",
+    "description": "Full server logs and log channel setup",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Tryb komendy logs",
+        "description": "logs command mode",
         "required": true,
         "choices": [
           {
@@ -743,7 +743,7 @@
       {
         "type": 7,
         "name": "channel",
-        "description": "Kanał logów (dla setup/channel)",
+        "description": "Log channel (for setup/channel)",
         "required": false,
         "channel_types": [
           0,
@@ -753,7 +753,7 @@
       {
         "type": 4,
         "name": "retention_days",
-        "description": "Ile dni trzymać pliki logów (1-365)",
+        "description": "How many days to keep log files (1-365)",
         "required": false,
         "min_value": 1,
         "max_value": 365
@@ -761,19 +761,19 @@
       {
         "type": 5,
         "name": "value",
-        "description": "Wartość true/false dla include_bots albo categories",
+        "description": "true/false value for include_bots or categories",
         "required": false
       },
       {
         "type": 3,
         "name": "day",
-        "description": "Dzień logu w formacie YYYY-MM-DD",
+        "description": "Log day as YYYY-MM-DD",
         "required": false
       },
       {
         "type": 3,
         "name": "category",
-        "description": "Kategoria do włączenia lub wyłączenia",
+        "description": "Category to enable or disable",
         "required": false,
         "choices": [
           {
@@ -853,7 +853,7 @@
       {
         "type": 4,
         "name": "older_than_days",
-        "description": "Purge plików starszych niż X dni",
+        "description": "Purge files older than X days",
         "required": false,
         "min_value": 1,
         "max_value": 3650
@@ -861,27 +861,27 @@
       {
         "type": 5,
         "name": "confirm",
-        "description": "Potwierdza purge logów",
+        "description": "Confirms the log purge",
         "required": false
       }
     ]
   },
   {
     "name": "health",
-    "description": "Szybki stan bota i kluczowych modułów",
+    "description": "Quick status of the bot and key modules",
     "dm_permission": false,
     "default_member_permissions": "8"
   },
   {
     "name": "debug",
-    "description": "Diagnostyka muzyki, uprawnień i logów",
+    "description": "Music, permission and log diagnostics",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "mode",
-        "description": "Zakres diagnostyki",
+        "description": "Diagnostics scope",
         "required": true,
         "choices": [
           {
@@ -901,58 +901,58 @@
       {
         "type": 7,
         "name": "channel",
-        "description": "Opcjonalny kanał do sprawdzenia uprawnień",
+        "description": "Optional channel to check permissions in",
         "required": false
       }
     ]
   },
   {
     "name": "dm",
-    "description": "Wysyła prywatną wiadomość do usera albo roli",
+    "description": "Sends a direct message to a user or a role",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
       {
         "type": 3,
         "name": "message",
-        "description": "Treść wiadomości prywatnej",
+        "description": "Direct message content",
         "required": true
       },
       {
         "type": 6,
         "name": "user",
-        "description": "Jeden odbiorca wiadomości",
+        "description": "A single recipient",
         "required": false
       },
       {
         "type": 8,
         "name": "role",
-        "description": "Rola, do której członków wysłać wiadomość",
+        "description": "Role whose members get the message",
         "required": false
       },
       {
         "type": 5,
         "name": "confirm",
-        "description": "Wymagane przy wysyłce masowej do roli",
+        "description": "Required for a bulk send to a role",
         "required": false
       }
     ]
   },
   {
     "name": "ytdlp",
-    "description": "Pobiera video z podanego adresu i wysyła je na kanał",
+    "description": "Downloads a video from a URL and posts it in the channel",
     "dm_permission": false,
     "options": [
       {
         "type": 3,
         "name": "url",
-        "description": "Adres URL video",
+        "description": "Video URL",
         "required": true
       },
       {
         "type": 5,
         "name": "audio",
-        "description": "Tylko dźwięk (MP3)",
+        "description": "Audio only (MP3)",
         "required": false
       }
     ]

@@ -15,10 +15,10 @@ const BULK_DM_BUDGET: std::time::Duration = std::time::Duration::from_secs(13 * 
 fn normalize_message(value: &str) -> Result<String, &'static str> {
     let text = value.trim();
     if text.is_empty() {
-        return Err("Wiadomość nie może być pusta.");
+        return Err("The message cannot be empty.");
     }
     if discord::js_len(text) > 2000 {
-        return Err("Wiadomość jest za długa. Limit DM to 2000 znaków.");
+        return Err("The message is too long. The DM limit is 2000 characters.");
     }
     Ok(text.to_owned())
 }
@@ -33,18 +33,20 @@ fn failure_preview(failures: &[(String, String)], limit: usize) -> String {
     if failures.len() <= limit {
         preview
     } else {
-        format!("{preview}\n... i jeszcze {} błędów", failures.len() - limit)
+        format!("{preview}\n... and {} more errors", failures.len() - limit)
     }
 }
 
 pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let Some(guild_id) = ix.guild_id() else {
         return ix
-            .reply_ephemeral("Ta komenda dziala tylko na serwerze.")
+            .reply_ephemeral("This command only works in a server.")
             .await;
     };
     if !ix.member_has(Permissions::ADMINISTRATOR) {
-        return ix.reply_ephemeral("Brak uprawnień Administratora.").await;
+        return ix
+            .reply_ephemeral("Administrator permission required.")
+            .await;
     }
     let opts = ix.opts();
     let target_user = opts.user("user");
@@ -52,7 +54,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let confirm = opts.boolean("confirm") == Some(true);
     if target_user.is_some() == target_role.is_some() {
         return ix
-            .reply_ephemeral("Podaj dokładnie jedno pole targetu: `user` albo `role`.")
+            .reply_ephemeral("Provide exactly one target: `user` or `role`.")
             .await;
     }
     let message = match normalize_message(&opts.string("message").unwrap_or_default()) {
@@ -65,12 +67,12 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     if let Some(user) = target_user {
         return match discord::send_dm(ix.app, user.id, &message).await {
             Ok(()) => {
-                ix.edit_content(format!("Wysłano DM do <@{}>.", user.id))
+                ix.edit_content(format!("Sent a DM to <@{}>.", user.id))
                     .await
             }
             Err(error) => {
                 ix.edit_content(format!(
-                    "Nie udało się wysłać DM do <@{}>: {}",
+                    "Could not send a DM to <@{}>: {}",
                     user.id,
                     discord::err_text(&error)
                 ))
@@ -85,13 +87,13 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     // many people, so it is reserved for the bot owner.
     if !ix.app.is_owner(ix.user_id()) {
         return ix
-            .edit_content("Wysyłka DM do całej roli jest dostępna tylko dla ownera bota.")
+            .edit_content("Sending a DM to a whole role is only available to the bot owner.")
             .await;
     }
 
     let Some(members) = discord::fetch_all_members(ix.app, guild_id).await else {
         return ix
-            .edit_content("Nie udało się pobrać listy członków serwera.")
+            .edit_content("Could not fetch the server member list.")
             .await;
     };
     let targets: Vec<_> = members
@@ -101,16 +103,13 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         .collect();
     if targets.is_empty() {
         return ix
-            .edit_content(format!(
-                "Rola <@&{}> nie ma żadnych odbiorców do wysyłki.",
-                role.id
-            ))
+            .edit_content(format!("Role <@&{}> has no recipients.", role.id))
             .await;
     }
     if targets.len() > BULK_DM_MAX_RECIPIENTS {
         return ix
             .edit_content(format!(
-                "Rola <@&{}> ma {} odbiorców; limit jednej wysyłki to {BULK_DM_MAX_RECIPIENTS}.",
+                "Role <@&{}> has {} recipients; the limit per send is {BULK_DM_MAX_RECIPIENTS}.",
                 role.id,
                 targets.len()
             ))
@@ -127,18 +126,16 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .edit_content(
                 [
                     format!(
-                        "Ta akcja wyśle DM do {} osób z roli <@&{}>.",
+                        "This will send a DM to {} members of <@&{}>.",
                         targets.len(),
                         role.id
                     ),
-                    "Dla bezpieczeństwa masowa wysyłka wymaga dodatkowego potwierdzenia."
-                        .to_owned(),
+                    "For safety, a bulk send needs an extra confirmation.".to_owned(),
                     String::new(),
-                    "Podgląd odbiorców:".to_owned(),
+                    "Recipient preview:".to_owned(),
                     preview,
                     String::new(),
-                    "Uruchom komendę ponownie z `confirm:true`, jeśli chcesz kontynuować."
-                        .to_owned(),
+                    "Run the command again with `confirm:true` to continue.".to_owned(),
                 ]
                 .join("\n"),
             )
@@ -165,20 +162,20 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let mut lines = vec![
         if stopped_early {
             format!(
-                "Wysyłka DM do roli <@&{}> przerwana: kończy się czas odpowiedzi Discorda.",
+                "DM send to <@&{}> stopped: the Discord response time is running out.",
                 role.id
             )
         } else {
-            format!("Wysyłka DM do roli <@&{}> zakończona.", role.id)
+            format!("DM send to <@&{}> finished.", role.id)
         },
         format!("Targety: {}", targets.len()),
         format!("Sukces: {sent}"),
-        format!("Błędy: {}", failures.len()),
+        format!("Errors: {}", failures.len()),
     ];
     let preview = failure_preview(&failures, 5);
     if !preview.is_empty() {
         lines.push(String::new());
-        lines.push("Podgląd błędów:".to_owned());
+        lines.push("Error preview:".to_owned());
         lines.push(preview);
     }
     ix.edit_content(lines.join("\n")).await

@@ -60,7 +60,7 @@ fn main() -> ExitCode {
     {
         Ok(runtime) => runtime,
         Err(error) => {
-            eprintln!("Nie można uruchomić runtime tokio: {error}");
+            eprintln!("Cannot start the tokio runtime: {error}");
             return ExitCode::FAILURE;
         }
     };
@@ -76,7 +76,7 @@ fn main() -> ExitCode {
                 Ok(ExitCode::SUCCESS)
             }
             Some(other) => {
-                eprintln!("Nieznana komenda: {other}\n");
+                eprintln!("Unknown command: {other}\n");
                 print_usage();
                 Ok(ExitCode::FAILURE)
             }
@@ -107,7 +107,7 @@ fn print_usage() {
 }
 
 fn bot_token() -> Result<String> {
-    env::var("BOT_TOKEN").context("Brak BOT_TOKEN w env.")
+    env::var("BOT_TOKEN").context("BOT_TOKEN is missing from the environment.")
 }
 
 fn user_tag(user: &CurrentUser) -> String {
@@ -142,7 +142,7 @@ fn doctor() -> ExitCode {
     let mut warnings = Vec::new();
     let mut errors = Vec::new();
     if env::var("BOT_TOKEN").is_none() {
-        errors.push("Brak BOT_TOKEN w env.".to_owned());
+        errors.push("BOT_TOKEN is missing from the environment.".to_owned());
     }
     if let Err(error) = config::read(&paths.config_path) {
         errors.push(config::format_config_error(&error, "Config: "));
@@ -164,7 +164,7 @@ fn doctor() -> ExitCode {
         });
         if let Err(error) = check {
             errors.push(format!(
-                "Katalogi runtime nie są gotowe do zapisu: {} ({error})",
+                "Runtime directories are not writable: {} ({error})",
                 dir.display()
             ));
             break;
@@ -172,11 +172,11 @@ fn doctor() -> ExitCode {
     }
     let owners = owners::resolve(&paths.config_path);
     if owners.ids.is_empty() {
-        warnings.push("Brak OWNER_IDS. Komendy owner-only będą niedostępne.".to_owned());
+        warnings.push("OWNER_IDS is missing. Owner-only commands will be unavailable.".to_owned());
     }
     if !owners.invalid.is_empty() {
         warnings.push(format!(
-            "Pominięte niepoprawne OWNER_IDS: {}",
+            "Skipped invalid OWNER_IDS: {}",
             owners.invalid.join(", ")
         ));
     }
@@ -190,15 +190,15 @@ fn doctor() -> ExitCode {
         format!("- Data dir: {}", paths.data_dir.display()),
         format!("- Logs dir: {}", paths.logs_dir.display()),
         format!(
-            "- Sync komend na starcie: {}",
+            "- Sync commands on startup: {}",
             if paths.sync_commands_on_startup {
-                "tak"
+                "yes"
             } else {
-                "nie"
+                "no"
             }
         ),
     ];
-    for (title, items) in [("Ostrzeżenia:", &warnings), ("Błędy:", &errors)] {
+    for (title, items) in [("Warnings:", &warnings), ("Errors:", &errors)] {
         if !items.is_empty() {
             lines.push(String::new());
             lines.push(title.to_owned());
@@ -246,7 +246,7 @@ async fn commands_sync(args: &[String]) -> Result<ExitCode> {
     let application_id = http
         .current_user_application()
         .await
-        .context("Sync komend nieudany")?
+        .context("Command sync failed")?
         .model()
         .await?
         .id;
@@ -254,7 +254,7 @@ async fn commands_sync(args: &[String]) -> Result<ExitCode> {
     let report = if clear_global || global {
         commands::sync_global(&raw, application_id, clear_global)
             .await
-            .context("Sync komend nieudany")?
+            .context("Command sync failed")?
     } else {
         let mut guilds = Vec::new();
         let mut missing = Vec::new();
@@ -438,7 +438,7 @@ fn mark_all_guilds(app: &App, online: bool, reason: &str, silent: bool) {
     }
     if !silent {
         tracing::info!(
-            "Zapisano status \"{}\" dla {} serwerow.",
+            "Saved status \"{}\" for {} servers.",
             if online { "online" } else { "offline" },
             ids.len()
         );
@@ -458,14 +458,14 @@ async fn on_ready(
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 
-    tracing::info!("Bot zalogowany jako {}", app.bot_tag);
+    tracing::info!("Bot logged in as {}", app.bot_tag);
     if app.startup_verbose {
         tracing::info!("Serwery: {}", app.guild_count());
     }
     let owners = owners::resolve(&app.paths.config_path);
     if owners.ids.is_empty() {
         tracing::warn!(
-            "Brak OWNER_IDS w env ani ownerIds w config.json. Komendy owner-only beda niedostepne."
+            "No OWNER_IDS in the environment and no ownerIds in config.json. Owner-only commands will be unavailable."
         );
     } else if app.startup_verbose {
         tracing::info!(
@@ -475,10 +475,7 @@ async fn on_ready(
         );
     }
     if !owners.invalid.is_empty() {
-        tracing::warn!(
-            "Pominieto niepoprawne OWNER_IDS: {}",
-            owners.invalid.join(", ")
-        );
+        tracing::warn!("Skipped invalid OWNER_IDS: {}", owners.invalid.join(", "));
     }
 
     app.state.migrate_legacy_server_cache();
@@ -512,7 +509,7 @@ async fn on_ready(
         guard.announcements = Some(announcement_runner);
     }
     tracing::info!(
-        "Start zakonczony. Serwery: {}. Nastepne czyszczenie: {}",
+        "Startup finished. Servers: {}. Next cleanup: {}",
         app.guild_count(),
         app.autoclean.next_run_text()
     );
@@ -523,7 +520,7 @@ async fn graceful_shutdown(app: &SharedApp, runners: &Mutex<Runners>, reason: &s
     if app.shutting_down.swap(true, Ordering::SeqCst) {
         return;
     }
-    tracing::info!("Wylaczanie bota ({reason})...");
+    tracing::info!("Shutting down the bot ({reason})...");
     {
         let mut guard = runners.lock().unwrap_or_else(|p| p.into_inner());
         for handle in [guard.verification.take(), guard.announcements.take()]

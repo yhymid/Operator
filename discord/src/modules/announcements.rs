@@ -88,17 +88,17 @@ pub fn parse_datetime(input: &str) -> Result<String> {
     let raw = input.trim();
     let caps = re
         .captures(raw)
-        .ok_or_else(|| anyhow!("Użyj formatu daty `YYYY-MM-DD HH:mm` (czas polski)."))?;
+        .ok_or_else(|| anyhow!("Use the date format `YYYY-MM-DD HH:mm` (Polish time)."))?;
     let num = |i: usize| caps[i].parse::<u32>().unwrap_or(u32::MAX);
     let date = NaiveDate::from_ymd_opt(num(1) as i32, num(2), num(3))
         .and_then(|d| d.and_hms_opt(num(4), num(5), 0))
-        .ok_or_else(|| anyhow!("Niepoprawna data lub godzina."))?;
+        .ok_or_else(|| anyhow!("Invalid date or time."))?;
     // An hour skipped by the spring DST change does not exist; an ambiguous autumn hour takes
     // the first occurrence.
     let local = chrono_tz::Europe::Warsaw
         .from_local_datetime(&date)
         .earliest()
-        .ok_or_else(|| anyhow!("Ta godzina nie istnieje w czasie polskim (zmiana czasu)."))?;
+        .ok_or_else(|| anyhow!("This time does not exist in Polish time (DST change)."))?;
     Ok(operator_common::time::to_iso(local.with_timezone(&Utc)))
 }
 
@@ -121,7 +121,7 @@ pub fn normalize_color(value: Option<String>) -> Result<Opt> {
         Opt::Set(raw) => {
             let raw = raw.strip_prefix('#').unwrap_or(&raw);
             if raw.len() != 6 || !raw.chars().all(|c| c.is_ascii_hexdigit()) {
-                bail!("Kolor musi być w formacie `#RRGGBB` albo `RRGGBB`.");
+                bail!("The color must be `#RRGGBB` or `RRGGBB`.");
             }
             Ok(Opt::Set(format!("#{}", raw.to_uppercase())))
         }
@@ -154,7 +154,7 @@ pub fn normalize_profile_name(value: Option<String>) -> Result<Opt> {
             let len = out.chars().count();
             if !(2..=32).contains(&len) {
                 bail!(
-                    "Nazwa profilu po normalizacji musi mieć 2-32 znaki: litery, cyfry, `-` albo `_`."
+                    "After normalization the profile name must be 2-32 characters: letters, digits, `-` or `_`."
                 );
             }
             Ok(Opt::Set(out))
@@ -168,7 +168,7 @@ pub fn normalize_mode(value: Option<String>) -> Result<Opt> {
         Opt::Set(raw) => {
             let raw = raw.to_lowercase();
             if !["message", "embed", "components"].contains(&raw.as_str()) {
-                bail!("Tryb wysyłki musi być jednym z: `message`, `embed`, `components`.");
+                bail!("The send mode must be one of: `message`, `embed`, `components`.");
             }
             Ok(Opt::Set(raw))
         }
@@ -179,11 +179,10 @@ pub fn normalize_mode(value: Option<String>) -> Result<Opt> {
 pub fn normalize_url(value: Option<String>) -> Result<Opt> {
     match normalize_optional_text(value) {
         Opt::Set(raw) => {
-            let url = url::Url::parse(&raw).map_err(|_| {
-                anyhow!("URL przycisku musi być poprawnym adresem http albo https.")
-            })?;
+            let url = url::Url::parse(&raw)
+                .map_err(|_| anyhow!("The button URL must be a valid http or https address."))?;
             if url.scheme() != "http" && url.scheme() != "https" {
-                bail!("URL przycisku musi zaczynać się od `http://` albo `https://`.");
+                bail!("The button URL must start with `http://` or `https://`.");
             }
             Ok(Opt::Set(url.to_string()))
         }
@@ -359,7 +358,7 @@ pub fn payload_parts(item: &Value) -> Result<Vec<Value>> {
     let button_label = s(item, "buttonLabel").trim();
     let button_url = s(item, "buttonURL").trim();
     if send_mode == "components" && (button_label.is_empty() || button_url.is_empty()) {
-        bail!("Tryb `components` wymaga `button_label` i `button_url`.");
+        bail!("The `components` mode needs `button_label` and `button_url`.");
     }
     let username = Some(s(item, "username"))
         .filter(|u| !u.is_empty())
@@ -594,7 +593,7 @@ async fn get_or_create_webhook(
     let token = created
         .token
         .clone()
-        .ok_or_else(|| anyhow!("Discord nie zwrócił tokenu webhooka."))?;
+        .ok_or_else(|| anyhow!("Discord did not return a webhook token."))?;
     let mut webhooks = resolved.state.webhooks;
     webhooks.insert(
         channel.clone(),
@@ -629,7 +628,7 @@ async fn edit(
     payload: &Value,
 ) -> Result<String> {
     let id = discord::parse_id::<MessageMarker>(message_id)
-        .ok_or_else(|| anyhow!("Niepoprawne messageId: {message_id}"))?;
+        .ok_or_else(|| anyhow!("Invalid messageId: {message_id}"))?;
     let mut payload = payload.clone();
     if let Some(obj) = payload.as_object_mut() {
         // Webhook message edits cannot change the author.
@@ -650,7 +649,7 @@ async fn edit(
 async fn delete_parts(app: &App, webhook: &WebhookRef, ids: &[String]) -> Result<()> {
     for raw in ids {
         let id = discord::parse_id::<MessageMarker>(raw)
-            .ok_or_else(|| anyhow!("Niepoprawne messageId: {raw}"))?;
+            .ok_or_else(|| anyhow!("Invalid messageId: {raw}"))?;
         app.http
             .delete_webhook_message(webhook.id, &webhook.token, id)
             .await?;
@@ -674,7 +673,9 @@ pub async fn send_now(app: &App, guild_id: Id<GuildMarker>, item: &Value) -> Res
                 .channel(*id)
                 .is_some_and(|c| c.guild_id == Some(guild_id) && discord::is_text_based(c.kind))
         })
-        .ok_or_else(|| anyhow!("Docelowy kanał nie istnieje albo nie obsługuje wiadomości."))?;
+        .ok_or_else(|| {
+            anyhow!("The target channel does not exist or does not support messages.")
+        })?;
     let webhook = get_or_create_webhook(app, &guild_id.to_string(), channel).await?;
     let mut ids = Vec::new();
     for payload in payload_parts(item)? {
@@ -710,7 +711,7 @@ pub async fn edit_message(
     let previous_ids = stored_message_ids(previous);
     let webhook_id = value_text(&previous["webhookId"]).filter(|v| !v.is_empty());
     let Some(webhook_id) = webhook_id.filter(|_| !previous_ids.is_empty()) else {
-        bail!("Brak danych webhooka lub messageId do edycji.");
+        bail!("Missing webhook data or messageId to edit.");
     };
     let delivery_channel = value_text(&previous["deliveryChannelId"])
         .filter(|v| !v.is_empty())
@@ -724,9 +725,9 @@ pub async fn edit_message(
         previous["webhookToken"].as_str(),
     )
     .await;
-    let webhook = resolved.webhook.ok_or_else(|| {
-        anyhow!("Nie udało się odzyskać webhooka dla już wysłanego announcementu.")
-    })?;
+    let webhook = resolved
+        .webhook
+        .ok_or_else(|| anyhow!("Could not recover the webhook of an already sent announcement."))?;
 
     let current_channel = value_text(&item["channelId"]).unwrap_or_default();
     let previous_channel = delivery_channel.clone().unwrap_or_default();
@@ -762,7 +763,7 @@ pub async fn edit_message(
         });
         let _ = delete_message(app, &guild, &rollback).await;
         bail!(
-            "Przełączono kanał, ale nie udało się usunąć poprzedniej publikacji: {}",
+            "Switched the channel, but could not delete the previous post: {}",
             discord::err_text(&error)
         );
     }
@@ -791,9 +792,9 @@ pub async fn delete_message(app: &App, guild_id: &str, item: &Value) -> Result<(
         item["webhookToken"].as_str(),
     )
     .await;
-    let webhook = resolved.webhook.ok_or_else(|| {
-        anyhow!("Nie udało się odzyskać webhooka do usunięcia wysłanego announcementu.")
-    })?;
+    let webhook = resolved
+        .webhook
+        .ok_or_else(|| anyhow!("Could not recover the webhook to delete the sent announcement."))?;
     delete_parts(app, &webhook, &ids).await
 }
 

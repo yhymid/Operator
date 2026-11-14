@@ -11,7 +11,7 @@ impl MusicManager {
     ) -> Result<()> {
         app.sender
             .command(&UpdateVoiceState::new(guild_id, channel, true, false))
-            .map_err(|e| anyhow!("Nie udało się wysłać voice state: {e}"))
+            .map_err(|e| anyhow!("Could not send the voice state: {e}"))
     }
 
     pub(super) async fn push_voice(&self, player: &mut Player) {
@@ -102,7 +102,7 @@ impl MusicManager {
                             .is_some_and(|channel| Self::human_listeners(&app, channel) == 0)
                 });
             if still_alone {
-                tracing::info!("Music: nikt nie slucha, rozlaczam guild={guild_id}");
+                tracing::info!("Music: nobody is listening, disconnecting guild={guild_id}");
                 app.music
                     .destroy(&app, guild_id, "alone in voice channel")
                     .await;

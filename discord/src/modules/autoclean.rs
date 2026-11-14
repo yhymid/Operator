@@ -189,7 +189,7 @@ impl AutoClean {
     pub fn next_run_text(&self) -> String {
         let schedule = self.schedule.lock().unwrap_or_else(|p| p.into_inner());
         let Some(schedule) = schedule.as_ref() else {
-            return "Brak harmonogramu".to_owned();
+            return "No schedule".to_owned();
         };
         match cron::next_after(&schedule.cron, schedule.timezone, Utc::now()) {
             Some(next) => next
@@ -211,7 +211,7 @@ impl AutoClean {
 
         if !config::not_false(&cfg, &["enabled"]) {
             self.update_next_run_for_all_guilds(app);
-            tracing::info!("AutoClean jest wylaczony.");
+            tracing::info!("AutoClean is disabled.");
             return Ok(());
         }
 
@@ -220,7 +220,7 @@ impl AutoClean {
         let parsed = match cron::parse(&pattern) {
             Ok(parsed) => parsed,
             Err(error) => {
-                tracing::error!("AutoClean: niepoprawny CRON {pattern}: {error}");
+                tracing::error!("AutoClean: invalid CRON {pattern}: {error}");
                 return Ok(());
             }
         };
@@ -247,7 +247,7 @@ impl AutoClean {
 
         self.update_next_run_for_all_guilds(app);
         self.schedule_next_warning(app);
-        tracing::info!("CRON ustawiony: {pattern} ({})", Self::timezone_name(&cfg));
+        tracing::info!("CRON set: {pattern} ({})", Self::timezone_name(&cfg));
         Ok(())
     }
 
@@ -521,7 +521,7 @@ impl AutoClean {
 
     pub async fn run_cleanup(&self, app: &SharedApp, trigger: &str) -> Option<Vec<CleanupResult>> {
         if !self.try_begin() {
-            tracing::warn!("Czyszczenie juz trwa.");
+            tracing::warn!("A cleanup is already running.");
             return None;
         }
         let result = self.run_cleanup_inner(app, trigger).await;
@@ -538,13 +538,13 @@ impl AutoClean {
             }
         };
         if !config::not_false(&cfg, &["enabled"]) {
-            tracing::warn!("AutoClean jest wylaczony.");
+            tracing::warn!("AutoClean is disabled.");
             return Vec::new();
         }
 
         let targets = self.pending_targets(app, &cfg, None);
         if targets.is_empty() {
-            tracing::warn!("Brak aktywnych kanalow do czyszczenia.");
+            tracing::warn!("No active channels to clean.");
             return Vec::new();
         }
 
@@ -589,7 +589,7 @@ impl AutoClean {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .total_deleted += deleted;
-        tracing::info!("Czyszczenie zakonczone. Usunieto {deleted} wiadomosci.");
+        tracing::info!("Cleanup finished. Deleted {deleted} messages.");
         self.send_cleanup_log(app, &results, trigger).await;
         self.update_next_run_for_all_guilds(app);
         self.schedule_next_warning(app);
@@ -604,7 +604,7 @@ impl AutoClean {
         trigger: &str,
     ) -> Option<CleanupResult> {
         if !self.try_begin() {
-            tracing::warn!("Czyszczenie juz trwa.");
+            tracing::warn!("A cleanup is already running.");
             return None;
         }
         if let Err(error) = self.load_config(app) {
@@ -657,11 +657,10 @@ impl AutoClean {
             None => None,
         };
         let Some(channel) = channel.filter(|c| discord::is_text_based(c.kind)) else {
-            let message = result
-                .error
-                .take()
-                .unwrap_or_else(|| "Kanał nie istnieje lub nie jest tekstowy".to_owned());
-            tracing::error!("Blad kanalu {channel_id}: {message}");
+            let message = result.error.take().unwrap_or_else(|| {
+                "The channel does not exist or is not a text channel".to_owned()
+            });
+            tracing::error!("Channel error {channel_id}: {message}");
             result.error = Some(message);
             return result;
         };
@@ -686,7 +685,7 @@ impl AutoClean {
         match outcome {
             Ok(deleted) => result.deleted = deleted,
             Err(error) => {
-                tracing::error!("Blad kanalu {}: {error}", channel.id);
+                tracing::error!("Channel error {}: {error}", channel.id);
                 result.error = Some(error.to_string());
             }
         }
@@ -816,7 +815,7 @@ impl AutoClean {
         }
         if config::is_true(&self.cfg(), &["dryRun"]) {
             tracing::warn!(
-                "[DRY RUN] Pominieto usuwanie {} wiadomosci z #{channel_name}",
+                "[DRY RUN] Skipped deleting {} messages from #{channel_name}",
                 messages.len()
             );
             return 0;
@@ -874,7 +873,7 @@ impl AutoClean {
         });
         if let Err(error) = discord::send_message(app, channel_id, &payload).await {
             tracing::error!(
-                "Nie udalo sie wyslac Components v2 na #{channel_name}: {error} payload={payload}"
+                "Could not send Components v2 to #{channel_name}: {error} payload={payload}"
             );
         }
     }
@@ -892,7 +891,7 @@ impl AutoClean {
         let template = config::at(&cfg, &["notifyBeforeDelete", "message"])
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
-            .unwrap_or("Za {minutes} minut kanał zostanie wyczyszczony.");
+            .unwrap_or("This channel will be cleaned in {minutes} minutes.");
         let text = template.replace("{minutes}", &minutes.to_string());
 
         for target in targets {
@@ -910,7 +909,7 @@ impl AutoClean {
             }
             if let Err(error) = app.http.create_message(channel_id).content(&text).await {
                 tracing::warn!(
-                    "Nie udalo sie wyslac notifyBeforeDelete na #{}: {error}",
+                    "Could not send notifyBeforeDelete to #{}: {error}",
                     channel.name.as_deref().unwrap_or(&target.channel_id)
                 );
             }
@@ -952,7 +951,7 @@ impl AutoClean {
             ])]
         });
         if let Err(error) = discord::send_message(app, log_channel, &payload).await {
-            tracing::warn!("Nie udalo sie wyslac logu AutoClean: {error}");
+            tracing::warn!("Could not send the AutoClean log: {error}");
         }
     }
 
@@ -1065,7 +1064,7 @@ async fn author_roles(
                 Ok(None)
             }
             _ => {
-                tracing::warn!("AutoClean: nie udało się pobrać członka {user}: {error}");
+                tracing::warn!("AutoClean: could not fetch member {user}: {error}");
                 Err(())
             }
         },
