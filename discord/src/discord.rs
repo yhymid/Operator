@@ -45,6 +45,17 @@ pub fn container(components: Vec<Value>) -> Value {
     json!({ "type": 17, "components": components })
 }
 
+/// Command replies echo user input and remote data (track titles, yt-dlp/Lavalink errors), so
+/// they never ping unless a payload sets `allowed_mentions` itself.
+pub fn no_pings(mut payload: Value) -> Value {
+    if let Some(object) = payload.as_object_mut() {
+        object
+            .entry("allowed_mentions")
+            .or_insert_with(|| json!({ "parse": [] }));
+    }
+    payload
+}
+
 /// `buildPanel(title, lines)` used by /logs: ephemeral V2 card without mentions.
 pub fn panel(title: &str, lines: &[String]) -> Value {
     json!({
@@ -172,8 +183,18 @@ impl<'a> Ix<'a> {
     }
 
     async fn respond(&self, kind: InteractionResponseType, data: Option<Value>) -> Result<()> {
+        let carries_message = matches!(
+            kind,
+            InteractionResponseType::ChannelMessageWithSource
+                | InteractionResponseType::UpdateMessage
+        );
         let data = match data {
             Some(value) => {
+                let value = if carries_message {
+                    no_pings(value)
+                } else {
+                    value
+                };
                 let (value, files) = split_files(value);
                 let mut parsed: InteractionResponseData =
                     serde_json::from_value(value).context("invalid interaction payload")?;
@@ -260,7 +281,7 @@ impl<'a> Ix<'a> {
 
     /// `interaction.editReply(payload)`
     pub async fn edit(&self, payload: Value) -> Result<()> {
-        let (value, files) = split_files(payload);
+        let (value, files) = split_files(no_pings(payload));
         let body = serde_json::to_vec(&value)?;
         let client = self.app.http.interaction(self.app.application_id);
         let mut request = client
@@ -275,7 +296,7 @@ impl<'a> Ix<'a> {
 
     /// Edit the reply with a single (possibly large) attachment without JSON-encoding the bytes.
     pub async fn edit_with_file(&self, content: &str, name: &str, bytes: Vec<u8>) -> Result<()> {
-        let body = serde_json::to_vec(&json!({ "content": content }))?;
+        let body = serde_json::to_vec(&no_pings(json!({ "content": content })))?;
         let files = [HttpAttachment::from_bytes(name.to_owned(), bytes, 0)];
         self.app
             .http
@@ -294,7 +315,7 @@ impl<'a> Ix<'a> {
 
     /// `interaction.followUp(payload)`
     pub async fn follow_up(&self, payload: Value) -> Result<()> {
-        let body = serde_json::to_vec(&payload)?;
+        let body = serde_json::to_vec(&no_pings(payload))?;
         self.app
             .http
             .interaction(self.app.application_id)
@@ -609,4 +630,19 @@ pub async fn send_dm(app: &App, user_id: Id<UserMarker>, content: &str) -> Resul
 /// JS `string.length` (UTF-16 code units).
 pub fn js_len(text: &str) -> usize {
     text.encode_utf16().count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replies_do_not_ping_by_default() {
+        assert_eq!(
+            no_pings(json!({ "content": "@everyone" }))["allowed_mentions"],
+            json!({ "parse": [] })
+        );
+        let explicit = json!({ "content": "<@1>", "allowed_mentions": { "users": ["1"] } });
+        assert_eq!(no_pings(explicit.clone()), explicit);
+    }
 }
