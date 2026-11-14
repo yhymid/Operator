@@ -138,6 +138,22 @@ impl StateStore {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!("Nie mozna odczytac cache {}: {error:#}", path.display());
+                // Keep an unparsable file: the next write would replace it with defaults.
+                if error.chain().any(|e| e.is::<serde_json::Error>()) {
+                    let backup = path.with_extension(format!(
+                        "json.corrupt-{}",
+                        Utc::now().format("%Y%m%dT%H%M%S%.3fZ")
+                    ));
+                    match std::fs::rename(path, &backup) {
+                        Ok(()) => {
+                            tracing::error!("Uszkodzony cache przeniesiony do {}", backup.display())
+                        }
+                        Err(error) => tracing::error!(
+                            "Nie mozna zachowac uszkodzonego cache {}: {error}",
+                            path.display()
+                        ),
+                    }
+                }
                 None
             }
         }
