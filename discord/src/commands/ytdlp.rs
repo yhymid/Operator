@@ -222,6 +222,24 @@ async fn find_downloaded_file(directory: &Path) -> Option<PathBuf> {
 // ---------------------------------------------------------------------------------------------
 
 /// Re-encodes HEVC/VP9/10-bit (Discord shows a frozen picture for HEVC) and remuxes for fast start.
+/// AV1 is only there to fit more video into Discord's upload limit. An 8-bit H.264 source that
+/// already fits (with ~10% headroom for the audio conversion) plays everywhere as it is, so it is
+/// remuxed instead of spending minutes of CPU on an AV1 encode.
+fn effective_codec(
+    configured: VideoCodec,
+    info: &operator_common::media::StreamInfo,
+    size: u64,
+    max_upload_bytes: u64,
+) -> VideoCodec {
+    let h264_8bit = info.video.as_deref() == Some("h264")
+        && matches!(info.pix_fmt.as_deref(), Some("yuv420p" | "yuvj420p"));
+    if configured == VideoCodec::Av1 && h264_8bit && size <= max_upload_bytes / 10 * 9 {
+        VideoCodec::H264
+    } else {
+        configured
+    }
+}
+
 async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> {
     if settings.codec == VideoCodec::Source {
         return Ok(path.to_owned());
@@ -256,8 +274,11 @@ async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> 
         return Ok(path.to_owned());
     }
     let output = path.with_file_name("delivery.mp4");
+    let size = tokio::fs::metadata(path)
+        .await
+        .map_or(u64::MAX, |m| m.len());
     let encode = Encode {
-        codec: settings.codec,
+        codec: effective_codec(settings.codec, &info, size, settings.max_upload_bytes),
         crf: settings.crf,
         av1_preset: settings.av1_preset,
     };
@@ -549,6 +570,33 @@ mod tests {
         assert!(normalize_url("ftp://x").is_err());
         assert!(is_youtube("https://www.youtube.com/watch?v=x"));
         assert!(!is_youtube("https://notyoutube.com/"));
+    }
+
+    #[test]
+    fn small_h264_skips_the_av1_encode() {
+        let h264 = parse_probe(
+            r#"{"streams":[{"codec_type":"video","codec_name":"h264","pix_fmt":"yuv420p"}]}"#,
+        );
+        let hevc = parse_probe(
+            r#"{"streams":[{"codec_type":"video","codec_name":"hevc","pix_fmt":"yuv420p"}]}"#,
+        );
+        let limit = 25 * 1024 * 1024;
+        assert_eq!(
+            effective_codec(VideoCodec::Av1, &h264, 10_000_000, limit),
+            VideoCodec::H264
+        );
+        assert_eq!(
+            effective_codec(VideoCodec::Av1, &h264, limit, limit),
+            VideoCodec::Av1
+        );
+        assert_eq!(
+            effective_codec(VideoCodec::Av1, &hevc, 1_000, limit),
+            VideoCodec::Av1
+        );
+        assert_eq!(
+            effective_codec(VideoCodec::H264, &hevc, 1_000, limit),
+            VideoCodec::H264
+        );
     }
 
     #[test]

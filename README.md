@@ -89,7 +89,8 @@ YouTube z VPS (sprawdzone 2026-11):
 1. yt-dlp pobiera najlepszy obraz i dzwiek (najwyzsza rozdzielczosc i FPS; przy remisie SDR i AV1).
 2. `ffprobe` sprawdza plik: obraz inny niz 8-bitowy AV1 (H.264, HEVC/H.265, VP9, 10-bit/HDR) jest
    kodowany SVT-AV1 (`-preset 10`, CRF 30, `yuv420p`; `YTDLP_AV1_PRESET`) - Discord pokazuje zamrozony obraz dla HEVC;
-   Opus -> AAC; pasujace strumienie sa kopiowane. Zawsze `+faststart`.
+   Opus -> AAC; pasujace strumienie sa kopiowane. Zawsze `+faststart`. Wyjatek: 8-bitowe H.264,
+   ktore miesci sie w limicie (z 10% zapasu), jest tylko przepakowywane - bez kosztownego kodowania AV1.
    `YTDLP_VIDEO_CODEC=h264` przelacza na H.264 High CRF 18 (najszersza zgodnosc, ok. 2,5x wieksze pliki).
 3. W trakcie widac tylko "Operator is thinking..."; gotowy plik jest wysylany bez tekstu.
    Plik do `YTDLP_MAX_UPLOAD_BYTES` (domyslnie 25 MiB) idzie jako zalacznik. Wiekszy - albo
