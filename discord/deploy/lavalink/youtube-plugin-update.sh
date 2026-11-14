@@ -3,7 +3,8 @@
 #
 #  1. reads the newest snapshot version from the Lavalink snapshot maven-metadata.xml,
 #  2. exits when application.yml already pins it (or when it was rolled back before),
-#  3. waits for an idle node: GET /v4/stats -> playingPlayers == 0 (otherwise exit 0, next timer run retries),
+#  3. waits for an idle node: GET /v4/stats -> players == 0, paused sessions included
+#     (otherwise exit 0, next timer run retries),
 #  4. backs up application.yml + plugins/, swaps the dependency line, restarts Lavalink,
 #  5. health check: /version answers, then a known video loads (/v4/loadtracks) and streams
 #     (/youtube/stream/{id}); on failure restores the backup, restarts again and remembers the bad version.
@@ -70,8 +71,9 @@ latest_version() {
     printf '%s' "$v"
 }
 
-playing_players() {
-    api /v4/stats | sed -n 's/.*"playingPlayers":[[:space:]]*\([0-9]*\).*/\1/p'
+# All players, not only playing ones: a restart also drops paused sessions and their queues.
+active_players() {
+    api /v4/stats | sed -n 's/.*"players":[[:space:]]*\([0-9]*\).*/\1/p'
 }
 
 wait_ready() {
@@ -120,9 +122,9 @@ if grep -qxF "$latest" "$STATE_DIR/bad-versions" 2>/dev/null; then
     exit 0
 fi
 
-playing=$(playing_players || true)
-if [[ $playing != 0 ]]; then
-    log "nowa wersja $latest, ale playingPlayers=${playing:-?} - przekladam na nastepne uruchomienie"
+players=$(active_players || true)
+if [[ $players != 0 ]]; then
+    log "nowa wersja $latest, ale players=${players:-?} - przekladam na nastepne uruchomienie"
     exit 0
 fi
 
@@ -162,6 +164,8 @@ systemctl restart "$LAVALINK_UNIT"
 if health_check; then
     log "przywrocono $current"
 else
+    # The old version fails too: YouTube/network, not the new build. Do not blacklist it.
     log "UWAGA: po przywroceniu $current health check tez nie przechodzi (problem po stronie YouTube/sieci?)"
+    sed -i "/^$latest\$/d" "$STATE_DIR/bad-versions"
 fi
 exit 1

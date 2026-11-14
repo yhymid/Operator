@@ -10,6 +10,7 @@ EnvironmentFile=-/etc/operator/youtube-plugin-update.env
 ExecStart=/usr/local/bin/youtube-plugin-update.sh
 # Runs as root only to `systemctl restart lavalink`; files are written in place (owner kept).
 ProtectSystem=strict
+# Must match LAVALINK_DIR (ProtectSystem=strict makes everything else read-only, /home too).
 ReadWritePaths=/srv/operator/lavalink
 PrivateTmp=true
 NoNewPrivileges=true
