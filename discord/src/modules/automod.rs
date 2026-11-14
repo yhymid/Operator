@@ -24,9 +24,16 @@ pub struct Violation {
 
 pub struct AutoMod {
     /// `config.automod`
-    config: Mutex<Value>,
+    config: Mutex<Arc<Value>>,
     history: Mutex<HashMap<String, Vec<(Instant, String)>>>,
+    /// Compiled `blockedWords`/`blockedRegex` patterns (case-insensitive), keyed by pattern.
+    /// Cleared on every config reload; bounded so `/automod test` input cannot grow it forever.
+    regex_cache: Mutex<HashMap<String, Result<Arc<fancy_regex::Regex>, String>>>,
 }
+
+/// Upper bound for `regex_cache` / duplicate `history` before a full reset / prune.
+const REGEX_CACHE_LIMIT: usize = 512;
+const HISTORY_PRUNE_THRESHOLD: usize = 4096;
 
 /// Lowercase + collapse whitespace (`normalizeContent`).
 fn normalize_content(value: &str) -> String {
@@ -53,28 +60,48 @@ pub struct TestResult {
 impl AutoMod {
     pub fn new(root_config: &Value) -> Self {
         Self {
-            config: Mutex::new(
+            config: Mutex::new(Arc::new(
                 root_config
                     .get("automod")
                     .cloned()
                     .unwrap_or_else(|| json!({})),
-            ),
+            )),
             history: Mutex::new(HashMap::new()),
+            regex_cache: Mutex::new(HashMap::new()),
         }
     }
 
-    pub fn cfg(&self) -> Value {
+    /// Snapshot of `config.automod` (cheap: shares the parsed config).
+    pub fn cfg(&self) -> Arc<Value> {
         self.config
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .clone()
     }
 
+    /// Case-insensitive JS-syntax regex, compiled once per pattern.
+    fn compiled(&self, pattern: &str) -> Result<Arc<fancy_regex::Regex>, String> {
+        let mut cache = self.regex_cache.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(entry) = cache.get(pattern) {
+            return entry.clone();
+        }
+        if cache.len() >= REGEX_CACHE_LIMIT {
+            cache.clear();
+        }
+        let entry = jsregex::compile(pattern, true).map(Arc::new);
+        cache.insert(pattern.to_owned(), entry.clone());
+        entry
+    }
+
     /// `automod.start()`: reload config and prune history.
     pub fn start(&self, app: &App) -> Result<(), config::ConfigError> {
         let root = config::read(&app.paths.config_path)?;
         *self.config.lock().unwrap_or_else(|p| p.into_inner()) =
-            root.get("automod").cloned().unwrap_or_else(|| json!({}));
+            Arc::new(root.get("automod").cloned().unwrap_or_else(|| json!({})));
+        self.regex_cache
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
         self.prune_history();
         Ok(())
     }
@@ -178,7 +205,8 @@ impl AutoMod {
                 "(^|{JS_NON_WORD}){}({JS_NON_WORD}|$)",
                 jsregex::escape(&trimmed.to_lowercase())
             );
-            if jsregex::compile(&pattern, true)
+            if self
+                .compiled(&pattern)
                 .ok()
                 .and_then(|re| re.is_match(&normalized).ok())
                 == Some(true)
@@ -191,7 +219,7 @@ impl AutoMod {
         }
 
         for pattern in config::string_list(rules, &["blockedRegex"]) {
-            match jsregex::compile(&pattern, true) {
+            match self.compiled(&pattern) {
                 Ok(re) => {
                     if re.is_match(content).unwrap_or(false) {
                         return Some(Violation {
@@ -288,6 +316,13 @@ impl AutoMod {
         }
         let window = Duration::from_secs(window as u64);
         let mut history = self.history.lock().unwrap_or_else(|p| p.into_inner());
+        // Keys of users who stopped posting would otherwise stay in the map forever.
+        if history.len() >= HISTORY_PRUNE_THRESHOLD {
+            history.retain(|_, entries| {
+                entries.retain(|(ts, _)| ts.elapsed() <= window);
+                !entries.is_empty()
+            });
+        }
         let entries = history.entry(key.to_owned()).or_default();
         entries.retain(|(ts, _)| ts.elapsed() <= window);
         entries.push((Instant::now(), normalized.to_owned()));
@@ -519,6 +554,25 @@ mod tests {
             am.detect(&rules, "spam", 0, Some("g:u")).unwrap().rule,
             "duplicate_spam"
         );
+    }
+
+    #[test]
+    fn compiled_patterns_are_cached_and_bounded() {
+        let am = automod(json!({ "blockedWords": ["kot"], "blockedRegex": ["fo+", "("] }));
+        let rules = am.cfg()["rules"].clone();
+        for _ in 0..3 {
+            assert_eq!(
+                am.detect(&rules, "FOOO", 0, None).unwrap().rule,
+                "blocked_regex"
+            );
+            assert!(am.detect(&rules, "nic tu nie ma", 0, None).is_none());
+        }
+        // word pattern + two regexes (the invalid one is cached as an error)
+        assert_eq!(am.regex_cache.lock().unwrap().len(), 3);
+        for i in 0..REGEX_CACHE_LIMIT + 10 {
+            let _ = am.compiled(&format!("x{i}"));
+        }
+        assert!(am.regex_cache.lock().unwrap().len() <= REGEX_CACHE_LIMIT);
     }
 
     #[test]
