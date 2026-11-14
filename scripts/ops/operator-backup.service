@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup of Operator bot state
+
+[Service]
+Type=oneshot
+User=ubuntu
+# Optional overrides: BOTS_DIR, BACKUP_DIR, KEEP, BACKUP_COPY_CMD.
+EnvironmentFile=-/etc/operator/backup.env
+ExecStart=/usr/local/bin/operator-backup.sh
+Nice=10
+IOSchedulingClass=idle
