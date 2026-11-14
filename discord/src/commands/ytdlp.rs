@@ -21,6 +21,14 @@ const MEDIA_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_UPLOAD_BYTES: u64 = 25 * 1024 * 1024;
 const DEFAULT_AV1_PRESET: u8 = 10;
+/// Interaction tokens expire 15 minutes after the defer; keep a margin for the final edit.
+const INTERACTION_BUDGET: Duration = Duration::from_secs(14 * 60);
+
+/// One download/encode at a time: parallel SVT-AV1 encodes starve the VPS (and Lavalink audio).
+fn job_slot() -> &'static tokio::sync::Semaphore {
+    static SLOT: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    SLOT.get_or_init(|| tokio::sync::Semaphore::new(1))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VideoCodec {
@@ -454,7 +462,18 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         .collect();
     let temp_dir = std::env::temp_dir().join(format!("yhymfiles-ytdlp-{suffix}"));
     tokio::fs::create_dir_all(&temp_dir).await?;
-    let result = download_and_send(ix, &settings, &url, &temp_dir).await;
+    // Waiting for the slot counts against the same 15-minute token, hence one timeout for both.
+    // Dropping the future on timeout kills yt-dlp/ffmpeg (`kill_on_drop`).
+    let result = tokio::time::timeout(INTERACTION_BUDGET, async {
+        let _slot = job_slot().acquire().await?;
+        download_and_send(ix, &settings, &url, &temp_dir).await
+    })
+    .await
+    .unwrap_or_else(|_| {
+        Err(anyhow!(
+            "Przekroczono limit czasu (Discord pozwala odpowiedziec w ciagu 15 minut)."
+        ))
+    });
     if let Err(error) = tokio::fs::remove_dir_all(&temp_dir).await {
         tracing::warn!(
             "Nie udalo sie usunac katalogu tymczasowego {}: {error}",
