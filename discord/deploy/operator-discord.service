@@ -16,6 +16,8 @@ KillSignal=SIGINT
 # SIGINT only to the bot; yt-dlp/ffmpeg children get SIGKILL only if still alive at the timeout.
 KillMode=mixed
 Nice=5
+# /tmp is tmpfs on the VPS: keep downloaded videos on disk, not in RAM.
+Environment=TMPDIR=/var/tmp
 TimeoutStopSec=20
 SyslogIdentifier=operator
 
