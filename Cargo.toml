@@ -1,0 +1,35 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "ISC"
+repository = "https://github.com/yhymid/Operator"
+
+[workspace.dependencies]
+anyhow = "1.0.104"
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
+dotenvy = "0.15.7"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs", "process", "io-util"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "env-filter", "ansi", "std"] }
+operator-common = { path = "crates/operator-common" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Small, fast binaries: one codegen unit + LTO, symbols stripped.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
