@@ -100,16 +100,24 @@ pub(super) fn queue_keyboard(bot: &Bot, ctx: &Ctx) -> Value {
             let position = queue
                 .position(&job)
                 .map_or("null".to_owned(), |p| p.to_string());
+            // The job id, not the position: the queue may move before the button is pressed.
             rows.push(vec![button(
                 format!("❌ Anuluj pozycję {position}"),
-                format!("ytdlp:cancel:{position}"),
+                format!("ytdlp:cancel:id:{}", job.id),
             )]);
         }
     }
     json!({ "reply_markup": { "inline_keyboard": rows } })
 }
 
+/// `id:<job id>` from current buttons, or a 1-based position (`/ytdlp_admin cancel 2`, old buttons).
 pub(super) fn job_at_position(raw: &str, queue: &Queue) -> Option<Arc<Job>> {
+    if let Some(id) = raw.strip_prefix("id:") {
+        return queue
+            .active_and_pending()
+            .into_iter()
+            .find(|job| job.id == id);
+    }
     let position = crate::settings::js_number(Some(raw));
     if !position.is_finite() || position.fract() != 0.0 || position < 1.0 {
         return None;

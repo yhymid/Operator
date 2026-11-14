@@ -88,6 +88,29 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn cancel_buttons_find_jobs_by_id_or_position() {
+        let queue = Queue::new("t", 1, 5, 0);
+        let add = |url: &str| {
+            queue
+                .add(NewJob {
+                    ctx: crate::bot::Ctx::new(&json!({ "update_id": 1 })),
+                    url: url.to_owned(),
+                    estimated_size: None,
+                    status: StatusUpdater::noop(),
+                    status_message_id: None,
+                })
+                .expect("queued")
+        };
+        let first = add("a");
+        let second = add("b");
+        let by_id = job_at_position(&format!("id:{}", second.id), &queue).expect("by id");
+        assert!(Arc::ptr_eq(&by_id, &second));
+        let by_position = job_at_position("1", &queue).expect("by position");
+        assert!(Arc::ptr_eq(&by_position, &first));
+        assert!(job_at_position("id:t-999", &queue).is_none());
+    }
+
+    #[tokio::test]
     async fn expired_page_cleanup_only_touches_published_pages() {
         let root = std::env::temp_dir().join(format!("op-tg-cleanup-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);

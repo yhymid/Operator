@@ -206,9 +206,18 @@ pub async fn handle_callback(bot: &Arc<Bot>, ctx: &Ctx) -> Result<()> {
             answer(Some(format!("Zatrzymano/anulowano: {count}.")), false).await;
         }
         _ => {
-            let outcome = job_at_position(&requested, queue).map(|job| queue.cancel(&job));
-            match outcome.as_ref().and_then(|o| cancel_text(o, &requested)) {
+            let job = job_at_position(&requested, queue);
+            // Show the position the job has now (an id means nothing to the user).
+            let label = job
+                .as_ref()
+                .and_then(|job| queue.position(job))
+                .map_or_else(|| requested.clone(), |p| p.to_string());
+            let outcome = job.map(|job| queue.cancel(&job));
+            match outcome.as_ref().and_then(|o| cancel_text(o, &label)) {
                 Some(text) => answer(Some(text), false).await,
+                None if requested.starts_with("id:") => {
+                    answer(Some("To zadanie już się zakończyło.".to_owned()), true).await;
+                }
                 None => answer(Some(format!("Nie znaleziono pozycji {requested}.")), true).await,
             }
         }
