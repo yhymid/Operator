@@ -2,7 +2,19 @@
 
 ## 1. Zbuduj binarke
 
-Na VPS (`curl https://sh.rustup.rs -sSf | sh`, potem):
+Najprosciej z release'u: tag `discord-v*` buduje binarke w GitHub Actions (Ubuntu 22.04, dziala
+na nowszym glibc) i dolacza ja z suma SHA256. Na serwerze `scripts/deploy.sh` ja pobiera,
+sprawdza sume, czeka az bot nic nie robi (brak procesow yt-dlp/ffmpeg w unicie, brak playerow
+Lavalinka), podmienia binarke, restartuje unit i przywraca poprzednia, gdy unit nie wstanie:
+
+```bash
+git tag discord-v1.0.0 discord && git push github discord-v1.0.0   # lokalnie
+scripts/deploy.sh discord discord-v1.0.0                             # na VPS
+```
+
+`BOT_DIR`, `UNIT`, `HEALTH_SECONDS`, `IDLE_TIMEOUT`, `FORCE=1` - opis w naglowku skryptu.
+
+Albo budowanie na VPS (`curl https://sh.rustup.rs -sSf | sh`, potem):
 
 ```bash
 git clone -b discord https://github.com/yhymid/Operator.git && cd Operator
@@ -72,13 +84,17 @@ i zrestartuj `lavalink`. Restartuj Lavalinka tylko, gdy nic nie gra (`GET /v4/st
 
 Nie uruchamiaj produkcji przez `nohup` z sesji SSH - proces potrafi zginac po wylogowaniu.
 
-### Automatyczna aktualizacja pluginu youtube-source (prototyp)
+### Automatyczna aktualizacja pluginu youtube-source
 
 `discord/deploy/lavalink/youtube-plugin-update.{sh,service,timer}` co ~3 h sprawdza najnowszy snapshot
 w `maven-metadata.xml`. Podmienia wersje w `application.yml` i restartuje Lavalinka tylko, gdy
-`/v4/stats` zwraca `playingPlayers == 0`; potem sprawdza `/v4/loadtracks` i `/youtube/stream/{id}`.
-Gdy test nie przejdzie - przywraca kopie `application.yml` i `plugins/`, a wersje dopisuje do
-`.youtube-plugin-update/bad-versions` (nie bedzie ponawiana).
+`/v4/stats` zwraca `players == 0` (takze bez wstrzymanych sesji); potem sprawdza `/v4/loadtracks`
+i `/youtube/stream/{id}`. Gdy test nie przejdzie - przywraca kopie `application.yml` i `plugins/`,
+a wersje dopisuje do `.youtube-plugin-update/bad-versions` (nie bedzie ponawiana). Jesli po
+przywroceniu test tez nie przechodzi, problem jest po stronie YouTube/sieci i wersja nie jest
+blokowana.
+
+`ReadWritePaths` w `youtube-plugin-update.service` musi wskazywac katalog Lavalinka (`LAVALINK_DIR`).
 
 ```bash
 sudo install -m 755 discord/deploy/lavalink/youtube-plugin-update.sh /usr/local/bin/

@@ -20,17 +20,23 @@ zostala w historii git (tag `js-final`).
 
 ```
 Cargo.toml                 workspace (wspolne wersje zaleznosci, profil release: LTO + strip)
-common/                    wspolny crate: .env, logowanie, atomowy zapis JSON, czas, sygnaly
+common/                    wspolny crate: .env, logowanie, atomowy zapis JSON, czas, sygnaly,
+                           net (blokada adresow lokalnych), media (ffprobe/ffmpeg, feature "media")
 discord/
   src/main.rs              start, petla gateway, CLI (run / commands sync / doctor)
   src/commands/            komendy slash (/help, /music, /logs, ...)
-  src/modules/             autoclean, automod, fulllogs, music, verification, announcements
+  src/modules/             autoclean, automod, verification, announcements,
+                           fulllogs/events/* (handler na zdarzenie), music/* (voice, search, controls, ...)
   src/lavalink.rs          klient Lavalink v4 (REST + WebSocket)
   commands.json            definicje komend slash
   deploy/                  .env.example, config.example.json, operator-discord.service,
                            lavalink/ (application.yml.example, lavalink.service)
 docs/                      deploy na VPS, roznice wzgledem JS
+scripts/                   deploy.sh (instalacja release'u z rollbackiem), sync-common.sh
 ```
+
+`common/` jest tez na galezi `telegram` i musi byc identyczny: zmieniaj go osobnym commitem,
+potem `scripts/sync-common.sh` przenosi go na druga galaz (CI ostrzega, gdy sie rozjada).
 
 ## Szybki start
 
@@ -90,8 +96,14 @@ YouTube z VPS (sprawdzone 2026-11):
    odrzucony przez Discorda jako za duzy (serwer bez boostow ma nizszy limit) - trafia do
    `YTDLP_MEDIA_ROOT` jako player pod `YTDLP_MEDIA_BASE_URL`, kasowany po 6 godzinach.
 
+Jedno zadanie naraz (kolejne czekaja), lacznie do 14 minut (token Discorda zyje 15). Filmy dluzsze
+niz `YTDLP_MAX_DURATION_SECONDS` (30 min) sa odrzucane, a pobieranie ponad `YTDLP_MAX_DOWNLOAD_BYTES`
+(1 GiB) przerywane. Adresy lokalne/prywatne (127.0.0.1, LAN, 169.254.169.254) sa odrzucane; na czat
+trafia zrozumialy powod bledu, surowe wyjscie yt-dlp tylko do logu.
+
 Zmienne: `YTDLP_PATH`, `YTDLP_COOKIES_PATH`, `YTDLP_JS_RUNTIME`, `YTDLP_VIDEO_CODEC=h264|av1|source`,
-`YTDLP_VIDEO_CRF`, `YTDLP_AV1_PRESET`, `FFMPEG_PATH`, `FFPROBE_PATH` - opisane w `discord/deploy/.env.example`.
+`YTDLP_VIDEO_CRF`, `YTDLP_AV1_PRESET`, `YTDLP_MAX_DURATION_SECONDS`, `YTDLP_MAX_DOWNLOAD_BYTES`,
+`FFMPEG_PATH`, `FFPROBE_PATH` - opisane w `discord/deploy/.env.example`.
 
 ## Rozwoj
 
