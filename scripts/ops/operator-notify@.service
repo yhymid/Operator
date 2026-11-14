@@ -1,0 +1,7 @@
+[Unit]
+Description=Discord notification about failed %i
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/operator/notify.env
+ExecStart=/usr/local/bin/operator-notify.sh %i
