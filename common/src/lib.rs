@@ -6,5 +6,6 @@
 pub mod env;
 pub mod fs;
 pub mod logging;
+pub mod net;
 pub mod shutdown;
 pub mod time;
