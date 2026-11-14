@@ -12,7 +12,7 @@ use crate::discord::{self, FLAG_COMPONENTS_V2, FLAG_EPHEMERAL, Ix};
 use crate::modules::fulllogs::resolve_logs_state;
 use crate::modules::music;
 use crate::owners;
-use crate::util::text::inline;
+use crate::util::text::{inline, truncate};
 
 type Checks = &'static [(Permissions, &'static str)];
 
@@ -173,10 +173,12 @@ async fn inspect_music(app: &App, guild_id: Option<Id<GuildMarker>>) -> MusicSna
             "Lavalink is offline. /play will not work until the node is back up.",
         ));
     }
-    if !d.has_explicit_password {
+    // The default password is only a problem when it does not match: then Lavalink refuses
+    // the connection. A connected node already proves it is right.
+    if !d.has_explicit_password && connected_nodes == 0 {
         issues.push(issue(
             Severity::Warning,
-            "LAVALINK_PASSWORD is not set explicitly. The bot is using the fallback.",
+            "LAVALINK_PASSWORD is not set; the default password is used. Check that it matches application.yml.",
         ));
     }
     if let Some(session) = &d.guild_session
@@ -587,13 +589,7 @@ fn runtime_section(app: &App) -> Section {
 pub async fn execute_health(ix: &Ix<'_>) -> Result<()> {
     let Some(guild_id) = ix.guild_id() else {
         return ix
-            .reply(build_panel(
-                "Health",
-                &[(
-                    "Info",
-                    vec!["This command only works in a server.".to_owned()],
-                )],
-            ))
+            .reply_ephemeral("This command only works in a server.")
             .await;
     };
     let app = ix.app;
@@ -601,33 +597,99 @@ pub async fn execute_health(ix: &Ix<'_>) -> Result<()> {
     let logs = inspect_logs(app, guild_id);
     let perms = inspect_permissions(ix, &music.diagnostics, None);
     let runtime = runtime_section(app);
+    let music_line = music_summary(&music.diagnostics);
+    let logs_line = logs_summary(app, guild_id);
     let mut issues = Vec::new();
     issues.extend(runtime.issues);
     issues.extend(music.issues);
     issues.extend(logs.issues);
     issues.extend(perms.issues);
-    let level = overall(&issues);
-    let mut runtime_lines = runtime.lines;
-    runtime_lines[0] = format!("Discord: online as {}", app.bot_tag);
-    let sections = [
-        (
-            "Summary",
-            vec![
-                format!("Overall state: {}", badge(level)),
-                if level == Severity::Ok {
-                    "The bot looks healthy. Key modules are ready.".to_owned()
-                } else {
-                    "Below are the most important problems to check before further diagnostics."
-                        .to_owned()
-                },
-            ],
+    ix.reply(health_panel(&app.bot_tag, &music_line, &logs_line, &issues))
+        .await
+}
+
+fn music_summary(d: &music::Diagnostics) -> String {
+    let online = d.usable && d.node.as_ref().is_some_and(|n| n.connected);
+    let lavalink = if online {
+        "Lavalink online"
+    } else {
+        "Lavalink offline"
+    };
+    let voice = match d
+        .guild_session
+        .as_ref()
+        .and_then(|s| s.voice_channel_id.map(|c| (s, c)))
+    {
+        Some((s, channel)) => {
+            let channel = format!("<#{channel}>");
+            match s.current_track_title.as_deref() {
+                Some(title) if s.playing || s.paused => format!(
+                    "{} in {channel}: {} (queue: {})",
+                    if s.paused { "paused" } else { "playing" },
+                    inline(title, 80),
+                    s.queue_size
+                ),
+                _ => format!("idle in {channel}"),
+            }
+        }
+        None => "not in a voice channel".to_owned(),
+    };
+    format!("{lavalink} · {voice}")
+}
+
+fn logs_summary(app: &App, guild_id: Id<GuildMarker>) -> String {
+    let state = resolve_logs_state(app, &guild_id.to_string());
+    if !state.enabled {
+        return "disabled".to_owned();
+    }
+    let Some(channel) = state
+        .channel_id
+        .as_deref()
+        .and_then(discord::parse_id::<ChannelMarker>)
+    else {
+        return "enabled, but no channel is set".to_owned();
+    };
+    let perms = channel_snapshot(app, Some(channel), TEXT_CHECKS);
+    let access = if perms.available && perms.missing.is_empty() {
+        "permissions OK".to_owned()
+    } else if perms.available {
+        format!("missing: {}", perms.missing.join(", "))
+    } else {
+        perms.reason.to_owned()
+    };
+    format!("enabled in <#{channel}> · {access}")
+}
+
+/// Short overview: one status line, one line per module, and the problems (if any).
+/// Paths, node details, retention and queues are in `/debug`.
+fn health_panel(bot_tag: &str, music: &str, logs: &str, issues: &[Issue]) -> Value {
+    let level = overall(issues);
+    let status = match (level, issues.len()) {
+        (Severity::Ok, _) => "✅ Everything works".to_owned(),
+        (_, 1) => format!("{} 1 problem", badge(level)),
+        (_, n) => format!("{} {n} problems", badge(level)),
+    };
+    let mut content = vec![
+        format!("## Health · {status}"),
+        format!(
+            "**Bot** · online as {bot_tag} · v{}",
+            env!("CARGO_PKG_VERSION")
         ),
-        ("Runtime", runtime_lines),
-        ("Music", music.lines.into_iter().take(5).collect()),
-        ("Logs", logs.lines.into_iter().take(4).collect()),
-        ("Red Flags", issue_lines(&issues)),
+        format!("**Music** · {music}"),
+        format!("**Logs** · {logs}"),
     ];
-    ix.reply(build_panel("Health", &sections)).await
+    if level != Severity::Ok {
+        content.push(String::new());
+        content.extend(issues.iter().map(|i| format!("{} {}", badge(i.0), i.1)));
+    }
+    json!({
+        "flags": FLAG_COMPONENTS_V2 | FLAG_EPHEMERAL,
+        "allowed_mentions": { "parse": [] },
+        "components": [{
+            "type": 17,
+            "components": [{ "type": 10, "content": truncate(&content.join("\n"), 3800) }],
+        }],
+    })
 }
 
 pub async fn execute_debug(ix: &Ix<'_>) -> Result<()> {
@@ -652,11 +714,11 @@ pub async fn execute_debug(ix: &Ix<'_>) -> Result<()> {
             let runtime = runtime_section(app);
             let mut issues = runtime.issues;
             issues.extend(music.issues);
-            let mut state = vec![format!("Ocena: {}", badge(overall(&issues)))];
+            let mut state = vec![format!("Rating: {}", badge(overall(&issues)))];
             state.extend(music.lines);
             ix.reply(build_panel(
                 "Debug Music",
-                &[("Stan", state), ("Red Flags", issue_lines(&issues))],
+                &[("State", state), ("Red Flags", issue_lines(&issues))],
             ))
             .await
         }
@@ -666,7 +728,7 @@ pub async fn execute_debug(ix: &Ix<'_>) -> Result<()> {
             ix.reply(build_panel(
                 "Debug Permissions",
                 &[
-                    ("Stan", perms.lines),
+                    ("State", perms.lines),
                     ("Red Flags", issue_lines(&perms.issues)),
                 ],
             ))
@@ -677,7 +739,7 @@ pub async fn execute_debug(ix: &Ix<'_>) -> Result<()> {
             ix.reply(build_panel(
                 "Debug Logs",
                 &[
-                    ("Stan", logs.lines),
+                    ("State", logs.lines),
                     ("Red Flags", issue_lines(&logs.issues)),
                 ],
             ))
@@ -690,5 +752,39 @@ pub async fn execute_debug(ix: &Ix<'_>) -> Result<()> {
             ))
             .await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn health_panel_is_short() {
+        let ok = health_panel(
+            "Operator#1204",
+            "Lavalink online · not in a voice channel",
+            "enabled in <#1> · permissions OK",
+            &[],
+        );
+        let text = ok["components"][0]["components"][0]["content"]
+            .as_str()
+            .unwrap();
+        println!("{text}");
+        assert_eq!(text.lines().count(), 4);
+        assert!(text.starts_with("## Health · ✅ Everything works"));
+
+        let bad = health_panel(
+            "Operator#1204",
+            "Lavalink offline · not in a voice channel",
+            "disabled",
+            &[issue(Severity::Critical, "Lavalink is offline.")],
+        );
+        let text = bad["components"][0]["components"][0]["content"]
+            .as_str()
+            .unwrap();
+        println!("{text}");
+        assert!(text.starts_with("## Health · ❌ Critical 1 problem"));
+        assert!(text.ends_with("❌ Critical Lavalink is offline."));
     }
 }

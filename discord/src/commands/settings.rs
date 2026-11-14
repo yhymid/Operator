@@ -729,7 +729,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             &format!("{label} / {option_key}"),
             None,
             vec![
-                json!({ "name": "Typ", "value": truncate_value(def.kind.name(), 1024), "inline": true }),
+                json!({ "name": "Type", "value": truncate_value(def.kind.name(), 1024), "inline": true }),
                 json!({ "name": "Current", "value": truncate_value(&format_option(key, def, &current), 1024), "inline": true }),
                 json!({ "name": "Description", "value": truncate_value(def.description, 1024), "inline": false }),
             ],
