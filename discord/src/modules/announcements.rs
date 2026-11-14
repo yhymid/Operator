@@ -671,7 +671,19 @@ pub async fn send_now(app: &App, guild_id: Id<GuildMarker>, item: &Value) -> Res
     let webhook = get_or_create_webhook(app, &guild_id.to_string(), channel).await?;
     let mut ids = Vec::new();
     for payload in payload_parts(item)? {
-        ids.push(execute(app, &webhook, &payload).await?);
+        match execute(app, &webhook, &payload).await {
+            Ok(id) => ids.push(id),
+            Err(error) => {
+                // The sweep retries failed sends: remove the parts already posted so a retry
+                // does not leave a half-duplicated announcement.
+                if !ids.is_empty()
+                    && let Err(cleanup) = delete_parts(app, &webhook, &ids).await
+                {
+                    tracing::warn!("Announcement partial cleanup failed: {cleanup:#}");
+                }
+                return Err(error);
+            }
+        }
     }
     Ok(Delivery {
         mode: "sent",
@@ -830,6 +842,10 @@ pub struct SweepStats {
 
 pub struct Announcements {
     sweep_lock: tokio::sync::Mutex<SweepStats>,
+    /// Held by `/announce` and by the sweep for a guild while they read, send and save the
+    /// announcement state: without it a sweep saving its stale copy dropped `/announce` edits,
+    /// and `send_now` racing the sweep could post the same announcement twice.
+    pub edit_lock: tokio::sync::Mutex<()>,
 }
 
 impl Default for Announcements {
@@ -842,6 +858,7 @@ impl Announcements {
     pub fn new() -> Self {
         Self {
             sweep_lock: tokio::sync::Mutex::new(SweepStats::default()),
+            edit_lock: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -860,6 +877,9 @@ impl Announcements {
     }
 }
 
+/// Sweeps that may fail to send an announcement before it is marked `failed`.
+const MAX_SEND_ATTEMPTS: u64 = 3;
+
 async fn perform_sweep(app: &App) -> SweepStats {
     let now = Utc::now();
     let sweep_time = operator_common::time::to_iso(now);
@@ -870,6 +890,7 @@ async fn perform_sweep(app: &App) -> SweepStats {
     for guild_id in app.guild_ids() {
         stats.guilds += 1;
         let guild = guild_id.to_string();
+        let _edit = app.announcements.edit_lock.lock().await;
         let mut state = ensure_shape(&app.state.announcements(&guild));
         let mut mutated = false;
         for item in &mut state.items {
@@ -904,12 +925,20 @@ async fn perform_sweep(app: &App) -> SweepStats {
                 }
                 Err(error) => {
                     let text = discord::err_text(&error);
+                    // A transient error (Discord 5xx, network) gets retried on the next sweeps.
+                    let attempts = item["sendAttempts"].as_u64().unwrap_or(0) + 1;
+                    let give_up = attempts >= MAX_SEND_ATTEMPTS;
                     if let Some(obj) = item.as_object_mut() {
-                        obj.insert("status".into(), json!("failed"));
+                        if give_up {
+                            obj.insert("status".into(), json!("failed"));
+                        }
+                        obj.insert("sendAttempts".into(), json!(attempts));
                         obj.insert("lastError".into(), json!(text));
                     }
                     mutated = true;
-                    stats.failed += 1;
+                    if give_up {
+                        stats.failed += 1;
+                    }
                     tracing::error!(
                         "Announcement send error ({guild}/{}): {text}",
                         s(item, "id")

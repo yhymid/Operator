@@ -353,6 +353,17 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .await;
     }
     let guild = guild_id.to_string();
+    // The sweep may be sending right now; wait briefly, but answer before Discord's 3 s limit.
+    let Ok(_edit) = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        app.announcements.edit_lock.lock(),
+    )
+    .await
+    else {
+        return ix
+            .reply_ephemeral("Trwa wysyłka zaplanowanych ogłoszeń. Spróbuj ponownie za chwilę.")
+            .await;
+    };
     let opts = ix.opts();
     let mode = opts.lower("mode");
     let mut current = ensure_shape(&app.state.announcements(&guild));
