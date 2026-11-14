@@ -863,7 +863,6 @@ dependencies = [
  "twilight-gateway",
  "twilight-http",
  "twilight-model",
- "twilight-util",
  "unicode-normalization",
  "url",
 ]
@@ -1636,7 +1635,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af846db90ea6db2b2dad6134ff761732bf53f9d05c6f269e81def7121ec68da4"
 dependencies = [
  "twilight-model",
- "twilight-validate",
 ]
 
 [[package]]
