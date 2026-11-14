@@ -16,5 +16,9 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+[features]
+# yt-dlp/ffprobe/ffmpeg helpers used by `/ytdlp` in both bots.
+media = []
+
 [lints]
 workspace = true

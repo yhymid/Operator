@@ -6,6 +6,8 @@
 pub mod env;
 pub mod fs;
 pub mod logging;
+#[cfg(feature = "media")]
+pub mod media;
 pub mod net;
 pub mod shutdown;
 pub mod time;
