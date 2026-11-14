@@ -1,6 +1,6 @@
 //! AutoClean (port of `src/events/autoclean.js`).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -11,7 +11,9 @@ use serde_json::{Value, json};
 use tokio::task::JoinHandle;
 use twilight_model::channel::Message;
 use twilight_model::id::Id;
-use twilight_model::id::marker::{ChannelMarker, GuildMarker, MessageMarker};
+use twilight_model::id::marker::{
+    ChannelMarker, GuildMarker, MessageMarker, RoleMarker, UserMarker,
+};
 
 use crate::app::{App, SharedApp};
 use crate::config;
@@ -701,13 +703,13 @@ impl AutoClean {
         result
     }
 
+    /// `should_delete` for one message; `author_roles` = the author's roles when the channel has
+    /// a role whitelist (`Ok(None)`: not a member, `Err`: unknown, so the message is kept).
     fn should_delete(
-        &self,
-        app: &App,
-        guild_id: Option<Id<GuildMarker>>,
         message: &Message,
         settings: &ChannelSettings,
         min_created_ms: Option<i64>,
+        author_roles: Result<Option<&[Id<RoleMarker>]>, ()>,
     ) -> bool {
         if !settings.delete_pinned && message.pinned {
             return false;
@@ -716,14 +718,18 @@ impl AutoClean {
         if settings.whitelist_users.contains(&author) {
             return false;
         }
-        if !settings.whitelist_roles.is_empty()
-            && let Some(guild_id) = guild_id
-            && let Some(roles) = discord::member_roles(app, guild_id, message.author.id)
-            && roles
-                .iter()
-                .any(|r| settings.whitelist_roles.contains(&r.to_string()))
-        {
-            return false;
+        if !settings.whitelist_roles.is_empty() {
+            match author_roles {
+                Err(()) => return false,
+                Ok(Some(roles))
+                    if roles
+                        .iter()
+                        .any(|r| settings.whitelist_roles.contains(&r.to_string())) =>
+                {
+                    return false;
+                }
+                Ok(_) => {}
+            }
         }
         if let Some(min) = min_created_ms
             && message.timestamp.as_micros() / 1000 > min
@@ -742,6 +748,7 @@ impl AutoClean {
     ) -> anyhow::Result<Vec<(Id<MessageMarker>, i64)>> {
         let mut out = Vec::new();
         let mut before: Option<Id<MessageMarker>> = None;
+        let mut members = HashMap::new();
         let min_created = (settings.delete_older_than_days > 0).then(|| {
             Utc::now().timestamp_millis() - settings.delete_older_than_days as i64 * 86_400_000
         });
@@ -770,7 +777,17 @@ impl AutoClean {
                 break;
             }
             for message in &batch {
-                if !self.should_delete(app, guild_id, message, settings, min_created) {
+                let roles = match guild_id {
+                    Some(guild_id) if !settings.whitelist_roles.is_empty() => {
+                        author_roles(app, guild_id, message, &mut members).await
+                    }
+                    _ => Ok(None),
+                };
+                let roles = match &roles {
+                    Ok(roles) => Ok(roles.as_deref()),
+                    Err(()) => Err(()),
+                };
+                if !Self::should_delete(message, settings, min_created, roles) {
                     continue;
                 }
                 out.push((message.id, message.timestamp.as_micros() / 1000));
@@ -1013,5 +1030,108 @@ impl AutoClean {
                 .map(str::to_owned),
             last_duration_ms: persisted["lastDurationMs"].clone(),
         }
+    }
+}
+
+type AuthorRoles = Result<Option<Vec<Id<RoleMarker>>>, ()>;
+
+/// Roles of a message author for the role whitelist. REST channel messages carry no member, so
+/// members missing from the gateway cache are fetched once per sweep (`members` memo).
+/// `Ok(None)` = not a member (webhook, left the server); `Err` = could not tell.
+async fn author_roles(
+    app: &App,
+    guild_id: Id<GuildMarker>,
+    message: &Message,
+    members: &mut HashMap<Id<UserMarker>, AuthorRoles>,
+) -> AuthorRoles {
+    if message.webhook_id.is_some() {
+        return Ok(None);
+    }
+    let user = message.author.id;
+    if let Some(roles) = discord::member_roles(app, guild_id, user) {
+        return Ok(Some(roles));
+    }
+    if let Some(known) = members.get(&user) {
+        return known.clone();
+    }
+    let fetched = match app.http.guild_member(guild_id, user).await {
+        Ok(response) => response
+            .model()
+            .await
+            .map(|member| Some(member.roles))
+            .map_err(|_| ()),
+        Err(error) => match error.kind() {
+            twilight_http::error::ErrorType::Response { status, .. } if status.get() == 404 => {
+                Ok(None)
+            }
+            _ => {
+                tracing::warn!("AutoClean: nie udało się pobrać członka {user}: {error}");
+                Err(())
+            }
+        },
+    };
+    members.insert(user, fetched.clone());
+    fetched
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn message(pinned: bool) -> Message {
+        serde_json::from_value(json!({
+            "id": "10", "channel_id": "20", "content": "x", "type": 0, "tts": false,
+            "timestamp": "2026-01-01T00:00:00+00:00", "edited_timestamp": null,
+            "mention_everyone": false, "mentions": [], "mention_roles": [],
+            "attachments": [], "embeds": [], "pinned": pinned,
+            "author": { "id": "30", "username": "u", "discriminator": "0", "avatar": null }
+        }))
+        .expect("message json")
+    }
+
+    fn settings(roles: &[&str]) -> ChannelSettings {
+        ChannelSettings {
+            channel_id: "20".into(),
+            enabled: true,
+            delete_limit: 0,
+            delete_pinned: false,
+            delete_older_than_days: 0,
+            whitelist_users: Vec::new(),
+            whitelist_roles: roles.iter().map(|r| (*r).to_owned()).collect(),
+            notify_enabled: false,
+            notify_minutes: 0,
+        }
+    }
+
+    #[test]
+    fn role_whitelist_keeps_protected_and_unknown_authors() {
+        let msg = message(false);
+        let protected = [Id::<RoleMarker>::new(5)];
+        let other = [Id::<RoleMarker>::new(6)];
+        let s = settings(&["5"]);
+        assert!(!AutoClean::should_delete(
+            &msg,
+            &s,
+            None,
+            Ok(Some(&protected))
+        ));
+        // Unknown roles (REST failed) must not delete.
+        assert!(!AutoClean::should_delete(&msg, &s, None, Err(())));
+        assert!(AutoClean::should_delete(&msg, &s, None, Ok(Some(&other))));
+        // Not a member anymore: whitelist cannot apply.
+        assert!(AutoClean::should_delete(&msg, &s, None, Ok(None)));
+        // Without a role whitelist the roles are irrelevant.
+        assert!(AutoClean::should_delete(
+            &msg,
+            &settings(&[]),
+            None,
+            Err(())
+        ));
+        assert!(!AutoClean::should_delete(
+            &message(true),
+            &settings(&[]),
+            None,
+            Ok(None)
+        ));
     }
 }
