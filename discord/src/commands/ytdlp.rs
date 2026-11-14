@@ -371,6 +371,9 @@ async fn cleanup_expired_in(root: &Path, cutoff: SystemTime) {
         return;
     };
     while let Ok(Some(entry)) = entries.next_entry().await {
+        if !is_published_name(&entry.file_name().to_string_lossy()) {
+            continue;
+        }
         if let Ok(meta) = entry.metadata().await
             && meta.is_file()
             && meta.modified().is_ok_and(|m| m < cutoff)
@@ -378,6 +381,19 @@ async fn cleanup_expired_in(root: &Path, cutoff: SystemTime) {
             let _ = tokio::fs::remove_file(entry.path()).await;
         }
     }
+}
+
+/// Names written by [`publish`]: a 36-character lowercase hex token plus one extension.
+fn is_published_name(name: &str) -> bool {
+    let Some((token, ext)) = name.split_once('.') else {
+        return false;
+    };
+    token.len() == 36
+        && token
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        && !ext.is_empty()
+        && ext.bytes().all(|b| b.is_ascii_alphanumeric())
 }
 
 /// `publishLargeVideo`: `<token>.<ext>` + `<token>.html` player, removed after 6 hours.
