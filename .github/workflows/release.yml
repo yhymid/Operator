@@ -1,8 +1,11 @@
 name: Release
 
-# Push a tag on the matching branch to publish a binary:
-#   git tag discord-v1.2.0 discord && git push github discord-v1.2.0
-#   git tag telegram-v1.2.0 telegram && git push github telegram-v1.2.0
+# A release is published only when a tag is pushed on purpose, never automatically:
+#   1. write the "## <version> - <Name>" section in CHANGELOG.md on that branch,
+#   2. git tag discord-v1.2 discord && git push github discord-v1.2
+#      git tag telegram-v1.2 telegram && git push github telegram-v1.2
+# The release gets the title and description from CHANGELOG.md (no generated commit list),
+# the compiled binary with its SHA256, and GitHub's source archives.
 on:
   push:
     tags:
@@ -33,6 +36,11 @@ jobs:
             *) echo "unexpected tag $GITHUB_REF_NAME" >&2; exit 1 ;;
           esac
 
+      - name: Release notes from CHANGELOG.md
+        run: |
+          title=$(bash scripts/release-notes.sh "$GITHUB_REF_NAME" release-notes.md)
+          echo "TITLE=$title" >> "$GITHUB_ENV"
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -59,4 +67,5 @@ jobs:
           files: |
             ${{ env.ASSET }}
             ${{ env.ASSET }}.sha256
-          generate_release_notes: true
+          name: ${{ env.TITLE }}
+          body_path: release-notes.md
