@@ -706,7 +706,7 @@ pub async fn execute_debug(ix: &Ix<'_>) -> Result<()> {
     };
     let app = ix.app;
     let opts = ix.opts();
-    let mode = opts.lower("mode");
+    let mode = opts.subcommand.unwrap_or_default().to_owned();
     let picked = opts.channel("channel");
     match mode.as_str() {
         "music" => {

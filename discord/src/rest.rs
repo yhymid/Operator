@@ -99,6 +99,41 @@ impl JsonClient {
     }
 }
 
+/// Downloads a Discord attachment (only `cdn.discordapp.com` / `media.discordapp.net` over
+/// HTTPS), refusing bodies over `max_bytes`.
+pub async fn download_attachment(url: &str, max_bytes: usize) -> Result<Vec<u8>> {
+    let parsed = url::Url::parse(url).context("invalid attachment URL")?;
+    if parsed.scheme() != "https"
+        || !matches!(
+            parsed.host_str(),
+            Some("cdn.discordapp.com" | "media.discordapp.net")
+        )
+    {
+        bail!("not a Discord attachment URL");
+    }
+    let client = build_client(false)?;
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(parsed.as_str())
+        .body(Full::new(Bytes::new()))?;
+    let exchange = async {
+        let response = client.request(request).await?;
+        let status = response.status();
+        if !status.is_success() {
+            bail!("download failed: {status}");
+        }
+        let bytes = http_body_util::Limited::new(response.into_body(), max_bytes)
+            .collect()
+            .await
+            .map_err(|error| anyhow::anyhow!("download failed: {error}"))?
+            .to_bytes();
+        anyhow::Ok(bytes.to_vec())
+    };
+    tokio::time::timeout(REQUEST_TIMEOUT, exchange)
+        .await
+        .context("download timed out")?
+}
+
 /// Raw Discord REST for routes twilight-http lacks.
 pub struct RawRest {
     inner: JsonClient,

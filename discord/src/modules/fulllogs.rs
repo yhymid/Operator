@@ -816,7 +816,7 @@ impl FullLogs {
                 "action": "test",
                 "actor": actor_payload(user),
                 "target": { "kind": "guild", "id": guild_id.to_string() },
-                "summary": "Manual test entry from /logs mode:test.",
+                "summary": "Manual test entry from /logs test.",
                 "details": [
                     format!("runtime=rust/{}", env!("CARGO_PKG_VERSION")),
                     format!("components_v2={FLAG_COMPONENTS_V2}"),

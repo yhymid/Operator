@@ -519,14 +519,18 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let app = ix.app;
     let guild = guild_id.to_string();
     let opts = ix.opts();
-    let mode = opts.lower("mode");
+    let mode = match opts.subcommand.unwrap_or_default() {
+        "resend" => "resend_panel",
+        "expire" => "expire_user",
+        "cleanup" => "cleanup_state",
+        other => other,
+    }
+    .to_owned();
 
     match mode.as_str() {
         "setup" => {
             let Some(role) = opts.role("role") else {
-                return ix
-                    .reply_ephemeral("For mode=setup, provide the `role` option.")
-                    .await;
+                return ix.reply_ephemeral("Provide the `role` option.").await;
             };
             let channel = resolve_panel_channel(ix, &safe_state(app, &guild));
             send_or_resend_panel(ix, guild_id, role.id, role.position, channel, "setup").await
@@ -540,7 +544,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             let Some(role_raw) = state.role_id.clone() else {
                 return ix
                     .reply_ephemeral(
-                        "No verify role is configured. First use `/verify mode:setup role:<role>`.",
+                        "No verify role is configured. First use `/verify setup role:<role>`.",
                     )
                     .await;
             };
@@ -561,9 +565,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         }
         "exception_add" => {
             let Some(user) = opts.user("user") else {
-                return ix
-                    .reply_ephemeral("For mode=exception_add, provide the `user` option.")
-                    .await;
+                return ix.reply_ephemeral("Provide the `user` option.").await;
             };
             let member = fetch_member(app, guild_id, user.id).await;
             let state = safe_state(app, &guild);
@@ -601,9 +603,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         }
         "exception_remove" => {
             let Some(user) = opts.user("user") else {
-                return ix
-                    .reply_ephemeral("For mode=exception_remove, provide the `user` option.")
-                    .await;
+                return ix.reply_ephemeral("Provide the `user` option.").await;
             };
             let state = safe_state(app, &guild);
             let member = fetch_member(app, guild_id, user.id).await;
@@ -643,9 +643,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         }
         "expire_user" => {
             let Some(user) = opts.user("user") else {
-                return ix
-                    .reply_ephemeral("For mode=expire_user, provide the `user` option.")
-                    .await;
+                return ix.reply_ephemeral("Provide the `user` option.").await;
             };
             let state = safe_state(app, &guild);
             let member = fetch_member(app, guild_id, user.id).await;

@@ -86,20 +86,20 @@ fn status_lines(state: &LogsState, channel_status: Option<&str>) -> Vec<String> 
     ]);
     lines.extend(
         [
-            "`/logs mode:setup channel:#channel`",
-            "`/logs mode:status`",
-            "`/logs mode:enable`",
-            "`/logs mode:disable`",
-            "`/logs mode:channel channel:#channel`",
-            "`/logs mode:retention retention_days:30`",
-            "`/logs mode:include_bots value:true|false`",
-            "`/logs mode:categories`",
-            "`/logs mode:categories category:message value:false`",
-            "`/logs mode:preview`",
-            "`/logs mode:export_day day:2026-06-02`",
-            "`/logs mode:purge day:2026-06-02 confirm:true`",
-            "`/logs mode:purge older_than_days:30 confirm:true`",
-            "`/logs mode:test`",
+            "`/logs setup channel:#channel`",
+            "`/logs status`",
+            "`/logs enable`",
+            "`/logs disable`",
+            "`/logs channel channel:#channel`",
+            "`/logs retention retention_days:30`",
+            "`/logs include_bots enabled:true|false`",
+            "`/logs categories`",
+            "`/logs categories category:message enabled:false`",
+            "`/logs preview`",
+            "`/logs export day:2026-06-02`",
+            "`/logs purge day:2026-06-02 confirm:true`",
+            "`/logs purge older_than_days:30 confirm:true`",
+            "`/logs test`",
         ]
         .map(str::to_owned),
     );
@@ -121,9 +121,9 @@ fn categories_lines(state: &LogsState) -> Vec<String> {
         ),
         String::new(),
         "Examples:".to_owned(),
-        "`/logs mode:categories category:message value:false`".to_owned(),
-        "`/logs mode:categories category:voice value:true`".to_owned(),
-        "`/logs mode:categories category:all value:true`".to_owned(),
+        "`/logs categories category:message enabled:false`".to_owned(),
+        "`/logs categories category:voice enabled:true`".to_owned(),
+        "`/logs categories category:all enabled:true`".to_owned(),
     ]
 }
 
@@ -151,7 +151,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let app = ix.app;
     let guild = guild_id.to_string();
     let opts = ix.opts();
-    let mode = opts.lower("mode");
+    let mode = match opts.subcommand.unwrap_or_default() {
+        "export" => "export_day",
+        other => other,
+    }
+    .to_owned();
     let current = resolve_logs_state(app, &guild);
     let picked_channel = || {
         opts.channel("channel")
@@ -179,7 +183,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     "enabled": true,
                     "channelId": channel.to_string(),
                     "retentionDays": retention,
-                    "includeBots": opts.boolean("value").unwrap_or(current.include_bots),
+                    "includeBots": opts.boolean("include_bots").unwrap_or(current.include_bots),
                     "forwardMode": if current.forward_mode.is_empty() { "all" } else { &current.forward_mode },
                     "disabledCategories": current.disabled_categories,
                 }),
@@ -209,7 +213,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         if next.include_bots { "yes" } else { "no" }
                     ),
                     format!("Categories: {categories}"),
-                    "Run `/logs mode:preview` or `/logs mode:test` to verify output.".to_owned(),
+                    "Run `/logs preview` or `/logs test` to verify output.".to_owned(),
                 ],
             ))
             .await
@@ -237,7 +241,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     format!(
                         "Channel: {}",
                         next.channel_id.as_deref().map_or(
-                            "not set (set with `/logs mode:channel`)".to_owned(),
+                            "not set (set with `/logs channel`)".to_owned(),
                             |c| format!("<#{c}>")
                         )
                     ),
@@ -294,11 +298,11 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .await
         }
         "include_bots" => {
-            let Some(value) = opts.boolean("value") else {
+            let Some(value) = opts.boolean("enabled") else {
                 return ix
                     .reply(panel(
                         "Logs Include Bots",
-                        &lines(&["Provide `value:true` or `value:false`."]),
+                        &lines(&["Provide `enabled:true` or `enabled:false`."]),
                     ))
                     .await;
             };
@@ -314,7 +318,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         }
         "categories" => {
             let category = opts.lower("category").trim().to_owned();
-            let value = opts.boolean("value");
+            let value = opts.boolean("enabled");
             if category.is_empty() && value.is_none() {
                 return ix
                     .reply(panel("Logs Categories", &categories_lines(&current)))
@@ -325,8 +329,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                     .reply(panel(
                         "Logs Categories",
                         &lines(&[
-                            "To change a category, provide both `category` and `value`.",
-                            "`value:true` enables the category, `value:false` disables it.",
+                            "To change a category, provide both `category` and `enabled`.",
+                            "`enabled:true` turns the category on, `enabled:false` turns it off.",
                         ]),
                     ))
                     .await;
@@ -337,8 +341,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         .reply(panel(
                             "Logs Categories",
                             &lines(&[
-                                "For `category:all`, use only `value:true` to enable all categories.",
-                                "To turn everything off, use `/logs mode:disable`.",
+                                "For `category:all`, use only `enabled:true` to turn all categories on.",
+                                "To turn everything off, use `/logs disable`.",
                             ]),
                         ))
                         .await;
@@ -381,7 +385,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         "Logs Categories",
                         &lines(&[
                             "You cannot disable all categories at once.",
-                            "Keep at least one enabled or use `/logs mode:disable`.",
+                            "Keep at least one enabled or use `/logs disable`.",
                         ]),
                     ))
                     .await;
@@ -456,8 +460,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         &lines(&[
                             "Purge requires explicit confirmation `confirm:true`.",
                             "Examples:",
-                            "`/logs mode:purge day:2026-06-02 confirm:true`",
-                            "`/logs mode:purge older_than_days:30 confirm:true`",
+                            "`/logs purge day:2026-06-02 confirm:true`",
+                            "`/logs purge older_than_days:30 confirm:true`",
                         ]),
                     ))
                     .await;
@@ -532,7 +536,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         "Logs Test",
                         &lines(&[
                             "First set a channel and enable logs:",
-                            "`/logs mode:setup channel:#channel`",
+                            "`/logs setup channel:#channel`",
                         ]),
                     ))
                     .await;

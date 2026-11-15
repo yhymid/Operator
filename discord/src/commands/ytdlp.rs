@@ -70,8 +70,7 @@ impl Settings {
                 .unwrap_or_else(|| "https://bladephoriafonk.xyz/media".to_owned())
                 .trim_end_matches('/')
                 .to_owned(),
-            cookies: env::var("YTDLP_COOKIES_PATH")
-                .map_or_else(|| PathBuf::from("cookies.txt"), PathBuf::from),
+            cookies: cookies_path(),
             codec,
             crf: env::var("YTDLP_VIDEO_CRF")
                 .and_then(|v| v.parse::<u32>().ok())
@@ -113,6 +112,11 @@ fn normalize_url(value: &str) -> Result<String, &'static str> {
         return Err("Only http:// and https:// URLs are allowed.");
     }
     Ok(parsed.to_string())
+}
+
+/// `YTDLP_COOKIES_PATH` (default `cookies.txt` next to the bot), also written by `/cookies`.
+pub fn cookies_path() -> PathBuf {
+    env::var("YTDLP_COOKIES_PATH").map_or_else(|| PathBuf::from("cookies.txt"), PathBuf::from)
 }
 
 /// Refuses links to local/private addresses (Lavalink, cloud metadata, LAN) before yt-dlp runs.

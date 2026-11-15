@@ -80,11 +80,8 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .reply_ephemeral("This command only works in a server.")
             .await;
     };
-    if !ix.app.is_owner(ix.user_id()) {
-        return ix.reply_ephemeral("This command is owner-only.").await;
-    }
     let guild = guild_id.to_string();
-    let mode = ix.opts().lower("mode");
+    let mode = ix.opts().subcommand.unwrap_or_default().to_owned();
     let cleaner = &ix.app.autoclean;
 
     if mode == "status" {

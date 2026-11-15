@@ -13,82 +13,116 @@
     "default_member_permissions": "8",
     "options": [
       {
-        "type": 3,
-        "name": "mode",
-        "description": "settings command mode",
-        "required": true,
-        "choices": [
+        "type": 1,
+        "name": "show",
+        "description": "Show settings",
+        "options": [
           {
-            "name": "show",
-            "value": "show"
+            "type": 3,
+            "name": "section",
+            "description": "Section",
+            "required": false,
+            "choices": [
+              {
+                "name": "autoclean",
+                "value": "autoclean"
+              },
+              {
+                "name": "automod",
+                "value": "automod"
+              },
+              {
+                "name": "verify",
+                "value": "verify"
+              }
+            ]
           },
           {
-            "name": "set",
-            "value": "set"
+            "type": 3,
+            "name": "option",
+            "description": "Option key, e.g. channel_settings",
+            "required": false
+          },
+          {
+            "type": 7,
+            "name": "channel_value",
+            "description": "Channel for channel_settings",
+            "required": false,
+            "channel_types": [
+              0,
+              5
+            ]
           }
         ]
       },
       {
-        "type": 3,
-        "name": "section",
-        "description": "Settings section",
-        "required": false,
-        "choices": [
+        "type": 1,
+        "name": "set",
+        "description": "Change a setting",
+        "options": [
           {
-            "name": "autoclean",
-            "value": "autoclean"
+            "type": 3,
+            "name": "section",
+            "description": "Section",
+            "required": true,
+            "choices": [
+              {
+                "name": "autoclean",
+                "value": "autoclean"
+              },
+              {
+                "name": "automod",
+                "value": "automod"
+              },
+              {
+                "name": "verify",
+                "value": "verify"
+              }
+            ]
           },
           {
-            "name": "automod",
-            "value": "automod"
+            "type": 3,
+            "name": "option",
+            "description": "Option key, e.g. dry_run or enabled",
+            "required": true
           },
           {
-            "name": "verify",
-            "value": "verify"
+            "type": 3,
+            "name": "string_value",
+            "description": "Text value or \"clear\"",
+            "required": false
+          },
+          {
+            "type": 4,
+            "name": "integer_value",
+            "description": "Number value",
+            "required": false
+          },
+          {
+            "type": 5,
+            "name": "boolean_value",
+            "description": "true/false value",
+            "required": false
+          },
+          {
+            "type": 7,
+            "name": "channel_value",
+            "description": "Channel value",
+            "required": false
+          },
+          {
+            "type": 8,
+            "name": "role_value",
+            "description": "Role value",
+            "required": false
+          },
+          {
+            "type": 6,
+            "name": "user_value",
+            "description": "User value",
+            "required": false
           }
         ]
-      },
-      {
-        "type": 3,
-        "name": "option",
-        "description": "Option key, e.g. dry_run or enabled",
-        "required": false
-      },
-      {
-        "type": 3,
-        "name": "string_value",
-        "description": "Text value or \"clear\"",
-        "required": false
-      },
-      {
-        "type": 4,
-        "name": "integer_value",
-        "description": "Number value",
-        "required": false
-      },
-      {
-        "type": 5,
-        "name": "boolean_value",
-        "description": "true/false value",
-        "required": false
-      },
-      {
-        "type": 7,
-        "name": "channel_value",
-        "description": "Channel value, or the channel for the channel_settings preview",
-        "required": false
-      },
-      {
-        "type": 8,
-        "name": "role_value",
-        "description": "Role value",
-        "required": false
-      },
-      {
-        "type": 6,
-        "name": "user_value",
-        "description": "User value",
-        "required": false
       }
     ]
   },
@@ -99,28 +133,28 @@
     "default_member_permissions": "8",
     "options": [
       {
-        "type": 3,
-        "name": "mode",
-        "description": "clean command mode",
-        "required": true,
-        "choices": [
-          {
-            "name": "now",
-            "value": "now"
-          },
-          {
-            "name": "set",
-            "value": "set"
-          },
-          {
-            "name": "reset",
-            "value": "reset"
-          },
-          {
-            "name": "status",
-            "value": "status"
-          }
-        ]
+        "type": 1,
+        "name": "now",
+        "description": "Clean this channel now",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "set",
+        "description": "Add this channel to the next scheduled cleanup",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "reset",
+        "description": "Remove this channel from the next cleanup",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "status",
+        "description": "Show the AutoClean status",
+        "options": []
       }
     ]
   },
@@ -131,21 +165,36 @@
     "default_member_permissions": "8",
     "options": [
       {
-        "type": 3,
-        "name": "mode",
-        "description": "cache command mode",
-        "required": true,
-        "choices": [
+        "type": 1,
+        "name": "server",
+        "description": "Show the saved data of a server",
+        "options": [
           {
-            "name": "serverinfo",
-            "value": "serverinfo"
+            "type": 3,
+            "name": "id",
+            "description": "Server ID",
+            "required": true
           }
         ]
+      }
+    ]
+  },
+  {
+    "name": "cookies",
+    "description": "Replace the yt-dlp cookies (owner only)",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 11,
+        "name": "file",
+        "description": "cookies.txt file (Netscape format)",
+        "required": false
       },
       {
         "type": 3,
-        "name": "id",
-        "description": "Guild ID (e.g. 1008460463148900373)",
+        "name": "text",
+        "description": "cookies.txt content pasted as text",
         "required": false
       }
     ]
@@ -254,19 +303,6 @@
     ]
   },
   {
-    "name": "seek",
-    "description": "Seeks in the current track",
-    "dm_permission": false,
-    "options": [
-      {
-        "type": 3,
-        "name": "time",
-        "description": "Time, e.g. 1:30 or 90",
-        "required": true
-      }
-    ]
-  },
-  {
     "name": "clear",
     "description": "Clears the queue (the current track keeps playing)",
     "dm_permission": false,
@@ -312,62 +348,95 @@
     "default_member_permissions": "8",
     "options": [
       {
-        "type": 3,
-        "name": "mode",
-        "description": "verify command mode",
-        "required": true,
-        "choices": [
+        "type": 1,
+        "name": "setup",
+        "description": "Create the verification panel",
+        "options": [
           {
-            "name": "setup",
-            "value": "setup"
+            "type": 8,
+            "name": "role",
+            "description": "Role given after verification",
+            "required": true
           },
           {
-            "name": "status",
-            "value": "status"
-          },
-          {
-            "name": "resend_panel",
-            "value": "resend_panel"
-          },
-          {
-            "name": "exception_add",
-            "value": "exception_add"
-          },
-          {
-            "name": "exception_remove",
-            "value": "exception_remove"
-          },
-          {
-            "name": "expire_user",
-            "value": "expire_user"
-          },
-          {
-            "name": "cleanup_state",
-            "value": "cleanup_state"
+            "type": 7,
+            "name": "channel",
+            "description": "Panel channel (default: this channel)",
+            "required": false,
+            "channel_types": [
+              0,
+              5
+            ]
           }
         ]
       },
       {
-        "type": 8,
-        "name": "role",
-        "description": "Verified role (for mode=setup)",
-        "required": false
+        "type": 1,
+        "name": "status",
+        "description": "Show the verification status",
+        "options": []
       },
       {
-        "type": 6,
-        "name": "user",
-        "description": "User for exception_add/exception_remove/expire_user",
-        "required": false
-      },
-      {
-        "type": 7,
-        "name": "channel",
-        "description": "Panel channel for setup/resend_panel",
-        "required": false,
-        "channel_types": [
-          0,
-          5
+        "type": 1,
+        "name": "resend",
+        "description": "Send the panel again",
+        "options": [
+          {
+            "type": 7,
+            "name": "channel",
+            "description": "Panel channel (default: the saved one)",
+            "required": false,
+            "channel_types": [
+              0,
+              5
+            ]
+          }
         ]
+      },
+      {
+        "type": 1,
+        "name": "exception_add",
+        "description": "Exempt a user from verification expiry",
+        "options": [
+          {
+            "type": 6,
+            "name": "user",
+            "description": "User",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "exception_remove",
+        "description": "Remove a user from the exceptions",
+        "options": [
+          {
+            "type": 6,
+            "name": "user",
+            "description": "User",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "expire",
+        "description": "End a user's verification now",
+        "options": [
+          {
+            "type": 6,
+            "name": "user",
+            "description": "User",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "cleanup",
+        "description": "Clean up stale verification data",
+        "options": []
       }
     ]
   },
@@ -534,184 +603,242 @@
     "default_member_permissions": "8",
     "options": [
       {
-        "type": 3,
-        "name": "mode",
-        "description": "logs command mode",
-        "required": true,
-        "choices": [
+        "type": 1,
+        "name": "setup",
+        "description": "Turn logs on and choose the log channel",
+        "options": [
           {
-            "name": "setup",
-            "value": "setup"
-          },
-          {
-            "name": "status",
-            "value": "status"
-          },
-          {
-            "name": "enable",
-            "value": "enable"
-          },
-          {
-            "name": "disable",
-            "value": "disable"
-          },
-          {
+            "type": 7,
             "name": "channel",
-            "value": "channel"
+            "description": "Log channel (default: this channel)",
+            "required": false,
+            "channel_types": [
+              0,
+              5
+            ]
           },
           {
-            "name": "retention",
-            "value": "retention"
+            "type": 4,
+            "name": "retention_days",
+            "description": "Days to keep log files (1-365)",
+            "required": false,
+            "min_value": 1,
+            "max_value": 365
           },
           {
+            "type": 5,
             "name": "include_bots",
-            "value": "include_bots"
-          },
-          {
-            "name": "test",
-            "value": "test"
-          },
-          {
-            "name": "preview",
-            "value": "preview"
-          },
-          {
-            "name": "export_day",
-            "value": "export_day"
-          },
-          {
-            "name": "categories",
-            "value": "categories"
-          },
-          {
-            "name": "purge",
-            "value": "purge"
+            "description": "Also log actions of bots",
+            "required": false
           }
         ]
       },
       {
-        "type": 7,
+        "type": 1,
+        "name": "status",
+        "description": "Show the logs configuration",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "enable",
+        "description": "Turn logs on",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "disable",
+        "description": "Turn logs off",
+        "options": []
+      },
+      {
+        "type": 1,
         "name": "channel",
-        "description": "Log channel (for setup/channel)",
-        "required": false,
-        "channel_types": [
-          0,
-          5
-        ]
-      },
-      {
-        "type": 4,
-        "name": "retention_days",
-        "description": "How many days to keep log files (1-365)",
-        "required": false,
-        "min_value": 1,
-        "max_value": 365
-      },
-      {
-        "type": 5,
-        "name": "value",
-        "description": "true/false value for include_bots or categories",
-        "required": false
-      },
-      {
-        "type": 3,
-        "name": "day",
-        "description": "Log day as YYYY-MM-DD",
-        "required": false
-      },
-      {
-        "type": 3,
-        "name": "category",
-        "description": "Category to enable or disable",
-        "required": false,
-        "choices": [
+        "description": "Change the log channel",
+        "options": [
           {
-            "name": "all",
-            "value": "all"
-          },
-          {
-            "name": "System",
-            "value": "system"
-          },
-          {
-            "name": "Command",
-            "value": "command"
-          },
-          {
-            "name": "Moderation",
-            "value": "moderation"
-          },
-          {
-            "name": "Member",
-            "value": "member"
-          },
-          {
-            "name": "Message",
-            "value": "message"
-          },
-          {
-            "name": "Reaction",
-            "value": "reaction"
-          },
-          {
-            "name": "Channel",
-            "value": "channel"
-          },
-          {
-            "name": "Role",
-            "value": "role"
-          },
-          {
-            "name": "Thread",
-            "value": "thread"
-          },
-          {
-            "name": "Voice",
-            "value": "voice"
-          },
-          {
-            "name": "Invite",
-            "value": "invite"
-          },
-          {
-            "name": "Emoji",
-            "value": "emoji"
-          },
-          {
-            "name": "Sticker",
-            "value": "sticker"
-          },
-          {
-            "name": "Webhook",
-            "value": "webhook"
-          },
-          {
-            "name": "Guild",
-            "value": "guild"
-          },
-          {
-            "name": "Audit",
-            "value": "audit"
-          },
-          {
-            "name": "AutoMod",
-            "value": "automod"
+            "type": 7,
+            "name": "channel",
+            "description": "New log channel",
+            "required": true,
+            "channel_types": [
+              0,
+              5
+            ]
           }
         ]
       },
       {
-        "type": 4,
-        "name": "older_than_days",
-        "description": "Purge files older than X days",
-        "required": false,
-        "min_value": 1,
-        "max_value": 3650
+        "type": 1,
+        "name": "retention",
+        "description": "How long log files are kept",
+        "options": [
+          {
+            "type": 4,
+            "name": "retention_days",
+            "description": "Days to keep log files (1-365)",
+            "required": true,
+            "min_value": 1,
+            "max_value": 365
+          }
+        ]
       },
       {
-        "type": 5,
-        "name": "confirm",
-        "description": "Confirms the log purge",
-        "required": false
+        "type": 1,
+        "name": "include_bots",
+        "description": "Log actions of bots too",
+        "options": [
+          {
+            "type": 5,
+            "name": "enabled",
+            "description": "true = log bots, false = skip them",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "categories",
+        "description": "Show or switch log categories",
+        "options": [
+          {
+            "type": 3,
+            "name": "category",
+            "description": "Category to switch",
+            "required": false,
+            "choices": [
+              {
+                "name": "all",
+                "value": "all"
+              },
+              {
+                "name": "System",
+                "value": "system"
+              },
+              {
+                "name": "Command",
+                "value": "command"
+              },
+              {
+                "name": "Moderation",
+                "value": "moderation"
+              },
+              {
+                "name": "Member",
+                "value": "member"
+              },
+              {
+                "name": "Message",
+                "value": "message"
+              },
+              {
+                "name": "Reaction",
+                "value": "reaction"
+              },
+              {
+                "name": "Channel",
+                "value": "channel"
+              },
+              {
+                "name": "Role",
+                "value": "role"
+              },
+              {
+                "name": "Thread",
+                "value": "thread"
+              },
+              {
+                "name": "Voice",
+                "value": "voice"
+              },
+              {
+                "name": "Invite",
+                "value": "invite"
+              },
+              {
+                "name": "Emoji",
+                "value": "emoji"
+              },
+              {
+                "name": "Sticker",
+                "value": "sticker"
+              },
+              {
+                "name": "Webhook",
+                "value": "webhook"
+              },
+              {
+                "name": "Guild",
+                "value": "guild"
+              },
+              {
+                "name": "Audit",
+                "value": "audit"
+              },
+              {
+                "name": "AutoMod",
+                "value": "automod"
+              }
+            ]
+          },
+          {
+            "type": 5,
+            "name": "enabled",
+            "description": "true = on, false = off",
+            "required": false
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "preview",
+        "description": "Preview the last saved log entry",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "export",
+        "description": "Download the log file of one day",
+        "options": [
+          {
+            "type": 3,
+            "name": "day",
+            "description": "Day as YYYY-MM-DD",
+            "required": true
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "purge",
+        "description": "Delete old log files",
+        "options": [
+          {
+            "type": 5,
+            "name": "confirm",
+            "description": "Confirm the deletion",
+            "required": true
+          },
+          {
+            "type": 3,
+            "name": "day",
+            "description": "Delete this day (YYYY-MM-DD)",
+            "required": false
+          },
+          {
+            "type": 4,
+            "name": "older_than_days",
+            "description": "Delete files older than X days",
+            "required": false,
+            "min_value": 1
+          }
+        ]
+      },
+      {
+        "type": 1,
+        "name": "test",
+        "description": "Send a test entry to the log channel",
+        "options": []
       }
     ]
   },
@@ -728,30 +855,29 @@
     "default_member_permissions": "8",
     "options": [
       {
-        "type": 3,
-        "name": "mode",
-        "description": "Diagnostics scope",
-        "required": true,
-        "choices": [
+        "type": 1,
+        "name": "music",
+        "description": "Music and Lavalink diagnostics",
+        "options": []
+      },
+      {
+        "type": 1,
+        "name": "permissions",
+        "description": "Bot permission diagnostics",
+        "options": [
           {
-            "name": "music",
-            "value": "music"
-          },
-          {
-            "name": "permissions",
-            "value": "permissions"
-          },
-          {
-            "name": "logs",
-            "value": "logs"
+            "type": 7,
+            "name": "channel",
+            "description": "Channel to check (default: this channel)",
+            "required": false
           }
         ]
       },
       {
-        "type": 7,
-        "name": "channel",
-        "description": "Optional channel to check permissions in",
-        "required": false
+        "type": 1,
+        "name": "logs",
+        "description": "Logs diagnostics",
+        "options": []
       }
     ]
   },

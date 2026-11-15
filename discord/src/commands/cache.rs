@@ -19,17 +19,15 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
         return ix.reply_ephemeral("This command is owner-only.").await;
     }
     let opts = ix.opts();
-    let mode = opts.lower("mode");
-    if mode != "serverinfo" {
+    let mode = opts.subcommand.unwrap_or_default();
+    if mode != "server" {
         return ix
             .reply_ephemeral(format!("Unknown cache mode: {mode}."))
             .await;
     }
     let id = opts.string("id").unwrap_or_default().trim().to_owned();
     if id.is_empty() {
-        return ix
-            .reply_ephemeral("For mode=serverinfo, provide `id`.")
-            .await;
+        return ix.reply_ephemeral("Provide `id`.").await;
     }
     if !is_snowflake_like(&id) {
         return ix

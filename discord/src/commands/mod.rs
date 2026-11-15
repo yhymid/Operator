@@ -4,6 +4,7 @@
 pub mod automod;
 pub mod cache;
 pub mod clean;
+pub mod cookies;
 pub mod diagnostics;
 pub mod dm;
 pub mod help;
@@ -258,6 +259,7 @@ async fn dispatch_command(ix: &Ix<'_>) -> Result<()> {
         "debug" => diagnostics::execute_debug(ix).await,
         "dm" => dm::execute(ix).await,
         "ytdlp" => ytdlp::execute(ix).await,
+        "cookies" => cookies::execute(ix).await,
         music if music::COMMANDS.contains(&music) => music::execute(ix, music).await,
         _ => Ok(()),
     }
@@ -288,6 +290,56 @@ mod tests {
         );
     }
 
+    /// Admin commands use subcommands (`/logs setup`), not a `mode:` option with every
+    /// option of every mode attached.
+    #[test]
+    fn no_mode_options_left() {
+        for command in payload().as_array().unwrap() {
+            let name = command["name"].as_str().unwrap();
+            for option in command["options"].as_array().into_iter().flatten() {
+                assert!(
+                    option["name"] != "mode" || name == "loop",
+                    "/{name} still has a mode option"
+                );
+            }
+        }
+    }
+
+    /// Discord rejects the whole command sync when a required option follows an optional one
+    /// or a description is longer than 100 characters.
+    #[test]
+    fn manifest_follows_discord_limits() {
+        fn check(path: &str, options: &[Value]) {
+            let mut optional_seen = false;
+            for option in options {
+                let name = option["name"].as_str().unwrap();
+                let description = option["description"].as_str().unwrap();
+                assert!(
+                    (1..=100).contains(&description.chars().count()),
+                    "{path} {name}"
+                );
+                if matches!(option["type"].as_u64(), Some(1 | 2)) {
+                    let nested = option["options"].as_array().map_or(&[][..], Vec::as_slice);
+                    check(&format!("{path} {name}"), nested);
+                    continue;
+                }
+                if option["required"] == true {
+                    assert!(
+                        !optional_seen,
+                        "{path}: required `{name}` after an optional option"
+                    );
+                } else {
+                    optional_seen = true;
+                }
+            }
+        }
+        for command in payload().as_array().unwrap() {
+            let name = command["name"].as_str().unwrap();
+            let options = command["options"].as_array().map_or(&[][..], Vec::as_slice);
+            check(&format!("/{name}"), options);
+        }
+    }
+
     #[test]
     fn manifest_matches_js() {
         let names: Vec<&str> = payload()
@@ -303,6 +355,7 @@ mod tests {
                 "settings",
                 "clean",
                 "cache",
+                "cookies",
                 "play",
                 "pause",
                 "resume",
@@ -313,7 +366,6 @@ mod tests {
                 "volume",
                 "remove",
                 "move",
-                "seek",
                 "clear",
                 "loop",
                 "reconnect",

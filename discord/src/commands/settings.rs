@@ -610,7 +610,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     let guild = guild_id.to_string();
     let app = ix.app;
     let opts = ix.opts();
-    let mode = opts.lower("mode");
+    let mode = opts.subcommand.unwrap_or_default().to_owned();
     let section = opts.string("section");
     let option_key = normalize_option_key(&opts.string("option").unwrap_or_default());
     let cfg = match config::read(&app.paths.config_path) {
@@ -638,7 +638,7 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
                         .map_or("n/a".to_owned(), |(_, v)| format_value(v));
                     json!({
                         "name": label,
-                        "value": format!("Status: {enabled}\nUse `/settings mode:show section:{key}`"),
+                        "value": format!("Status: {enabled}\nUse `/settings show section:{key}`"),
                         "inline": false,
                     })
                 })
@@ -743,10 +743,10 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             .await;
     }
     let Some(section) = section else {
-        return ix.reply_ephemeral("For mode=set, provide `section`.").await;
+        return ix.reply_ephemeral("Provide `section`.").await;
     };
     if option_key.is_empty() {
-        return ix.reply_ephemeral("For mode=set, provide `option`.").await;
+        return ix.reply_ephemeral("Provide `option`.").await;
     }
     let Some((key, _, options)) = find_section(&section) else {
         return ix

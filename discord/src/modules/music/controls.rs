@@ -270,27 +270,6 @@ impl MusicManager {
             .map(|t| normalize_track(&t)))
     }
 
-    /// Jumps to `position_ms` of the current track (clamped to the track length).
-    pub async fn seek(
-        &self,
-        guild_id: Id<GuildMarker>,
-        position_ms: i64,
-    ) -> Result<Option<Snapshot>> {
-        self.with_active(guild_id, |player| {
-            let track = player.current.as_ref()?;
-            let length = duration_ms(track) as i64;
-            let target = if length > 0 {
-                position_ms.clamp(0, (length - 1000).max(0))
-            } else {
-                position_ms.max(0)
-            };
-            player.last_position = target;
-            player.last_position_at = (!player.paused).then(Instant::now);
-            Some(json!({ "position": target }))
-        })
-        .await
-    }
-
     /// Moves the queued track at 1-based `from` to `to`; returns it.
     pub async fn move_in_queue(
         &self,
