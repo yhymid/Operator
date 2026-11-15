@@ -18,6 +18,19 @@ impl MusicManager {
             } => {
                 tracing::info!("Music provider ready: Lavalink node {}", self.node_id());
                 tracing::debug!("Lavalink session={session_id} resumed={resumed}");
+                if resumed {
+                    tracing::info!("Lavalink session resumed: playback continues");
+                } else {
+                    // A new session has no players (Lavalink restarted, or we were away longer
+                    // than the resume timeout): give every session its voice link, track and
+                    // position back instead of leaving it silent.
+                    let mut players = self.players.lock().await;
+                    for player in players.values_mut() {
+                        self.push_voice(player).await;
+                    }
+                    drop(players);
+                    self.resume_after_restart(app).await;
+                }
                 self.refresh_status();
             }
             NodeEvent::Disconnected { reason } => {

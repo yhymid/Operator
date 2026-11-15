@@ -34,6 +34,11 @@ mod voice;
 
 pub use matching::*;
 
+/// A bot restart continues sessions saved at most this long ago.
+const RESTART_RESUME_MAX_AGE_MS: i64 = 10 * 60 * 1000;
+const NORMALIZATION_MAX_AMPLITUDE: f64 = 0.6;
+const ECHO_LENGTH_SECS: f64 = 0.3;
+const ECHO_DECAY: f64 = 0.4;
 const DEFAULT_SEARCH_SOURCE: &str = "ytmsearch";
 const DEFAULT_SPOTIFY_MIRROR_SOURCES: [&str; 3] = ["ytsearch", "ytmsearch", "scsearch"];
 const DEFAULT_RECOVERY_SOURCES: [&str; 3] = ["ytsearch", "ytmsearch", "scsearch"];
@@ -263,6 +268,8 @@ struct Player {
     rotation: bool,
     karaoke: bool,
     low_pass: bool,
+    normalization: bool,
+    echo: bool,
     equalizer: Vec<f64>,
     skipped: bool,
     destroying: bool,
@@ -306,6 +313,8 @@ impl Player {
             rotation: false,
             karaoke: false,
             low_pass: false,
+            normalization: false,
+            echo: false,
             equalizer: Vec::new(),
             skipped: false,
             destroying: false,
@@ -358,6 +367,23 @@ impl Player {
         }
         if self.low_pass {
             filters.insert("lowPass".into(), json!({ "smoothing": LOW_PASS_SMOOTHING }));
+        }
+        // LavaDSPX plugin filters.
+        let mut plugin_filters = serde_json::Map::new();
+        if self.normalization {
+            plugin_filters.insert(
+                "normalization".into(),
+                json!({ "maxAmplitude": NORMALIZATION_MAX_AMPLITUDE, "adaptive": true }),
+            );
+        }
+        if self.echo {
+            plugin_filters.insert(
+                "echo".into(),
+                json!({ "echoLength": ECHO_LENGTH_SECS, "decay": ECHO_DECAY }),
+            );
+        }
+        if !plugin_filters.is_empty() {
+            filters.insert("pluginFilters".into(), Value::Object(plugin_filters));
         }
         if !self.equalizer.is_empty() {
             let bands: Vec<Value> = self
@@ -608,7 +634,9 @@ impl MusicManager {
                 env::var("MUSIC_RECOVERY_SOURCES"),
                 &DEFAULT_RECOVERY_SOURCES,
             ),
-            default_volume: js_round(env_number("LAVALINK_VOLUME", 80.0)),
+            // 100 %: Lavalink passes Opus sources through untouched; any other volume makes it
+            // decode and re-encode every track.
+            default_volume: js_round(env_number("LAVALINK_VOLUME", 100.0)),
             idle_disconnect_ms: env_number("MUSIC_IDLE_DISCONNECT_MS", IDLE_DISCONNECT_MS),
             alone_disconnect_ms: env_number("MUSIC_ALONE_DISCONNECT_MS", ALONE_DISCONNECT_MS),
             error_threshold_ms: env_number("MUSIC_ERROR_THRESHOLD_MS", 120_000.0),
@@ -903,6 +931,23 @@ async fn event_loop(app: Weak<App>, mut events: mpsc::UnboundedReceiver<NodeEven
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Verified against Lavalink 4.2.2 + LavaDSPX 0.0.5: this body is accepted and echoed
+    /// back; without the plugin Lavalink ignores `pluginFilters` and keeps the other filters.
+    #[test]
+    fn plugin_filters_body() {
+        let mut player = Player::new(1, Id::new(1), Id::new(2), 100);
+        assert_eq!(player.filters_body(), json!({}));
+        player.normalization = true;
+        player.echo = true;
+        assert_eq!(
+            player.filters_body()["pluginFilters"],
+            json!({
+                "normalization": { "maxAmplitude": 0.6, "adaptive": true },
+                "echo": { "echoLength": 0.3, "decay": 0.4 }
+            })
+        );
+    }
 
     fn track(title: &str, author: &str, length: i64, source: &str) -> Value {
         json!({

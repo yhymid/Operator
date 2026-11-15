@@ -82,7 +82,12 @@ Config: [`deploy/lavalink/application.yml.example`](deploy/lavalink/application.
 systemd unit: `deploy/lavalink/lavalink.service` (Lavalink 4.2+). Lavalink downloads its
 plugins itself. The connection is set in `.env` (`LAVALINK_URL`, or
 `LAVALINK_HOST`/`PORT`/`PASSWORD`/`SECURE`). The bot runs without Lavalink and connects when
-the node comes up.
+the node comes up. A dropped connection resumes the same Lavalink session, and a bot restart
+continues each session from the same track and position.
+
+The example config also loads LavaLyrics (the Lyrics button, lyrics from LRCLIB) and LavaDSPX
+(Normalize and Echo effects). Deezer (FLAC / MP3 320) is prepared but off: it needs
+`DEEZER_ARL` and `DEEZER_MASTER_KEY`, see the comments in the config.
 
 YouTube from a server address (checked 2026-11):
 

@@ -252,6 +252,8 @@ pub fn panel_payload(snapshot: Option<&Snapshot>) -> Value {
                         select_option("8D", "8d", "Rotating stereo effect", false),
                         select_option("Karaoke", "karaoke", "Try to suppress vocals", false),
                         select_option("SoftLimiter", "softlimiter", "Gentle low-pass", false),
+                        select_option("Normalize", "normalize", "Even out loud and quiet tracks", false),
+                        select_option("Echo", "echo", "Echo effect", false),
                         select_option("FX Off", "off", "Turn off all FX", false),
                     ],
                     "disabled": disabled,
@@ -277,14 +279,29 @@ fn queue_preview(snapshot: Option<&Snapshot>) -> String {
     lines.join("\n")
 }
 
-fn lyrics_content(snapshot: Option<&Snapshot>) -> String {
-    let Some(track) = snapshot.and_then(|s| s.current_track.as_ref()) else {
-        return "No track to look up lyrics for.".to_owned();
-    };
-    let query: String = url::form_urlencoded::byte_serialize(track.title.as_bytes())
+/// Discord allows 2000 characters per message; the rest is the title line and the cut marker.
+const MAX_LYRICS_CHARS: usize = 1800;
+
+fn lyrics_search_link(title: &str) -> String {
+    let query: String = url::form_urlencoded::byte_serialize(title.as_bytes())
         .collect::<String>()
         .replace('+', "%20");
-    format!("Lyrics (search): https://genius.com/search?q={query}")
+    format!("https://genius.com/search?q={query}")
+}
+
+/// The lyrics from Lavalink, or a search link when it has none (or no lyrics plugin).
+fn lyrics_reply(title: &str, lyrics: Option<&str>) -> String {
+    match lyrics {
+        Some(text) => {
+            let mut body: String = text.chars().take(MAX_LYRICS_CHARS).collect();
+            if text.chars().count() > MAX_LYRICS_CHARS {
+                body.push_str("\n… ");
+                body.push_str(&lyrics_search_link(title));
+            }
+            format!("**{}**\n{body}", truncate_text(title, 120))
+        }
+        None => format!("No lyrics found. Search: {}", lyrics_search_link(title)),
+    }
 }
 
 fn member_voice_channel(ix: &Ix<'_>) -> Option<Id<ChannelMarker>> {
@@ -951,10 +968,30 @@ async fn handle_panel_action(
             .reply_ephemeral("You must be in the same voice channel as the bot.")
             .await;
     }
+    if is_button && action == "lyrics" {
+        let Some(title) = snapshot
+            .as_ref()
+            .and_then(|s| s.current_track.as_ref())
+            .map(|t| t.title.clone())
+        else {
+            return ix.reply_ephemeral("No track to look up lyrics for.").await;
+        };
+        ix.defer(true).await?;
+        let lyrics = match app.music.lyrics(guild_id).await {
+            Ok(lyrics) => lyrics,
+            Err(error) => {
+                tracing::debug!("Lyrics lookup failed guild={guild_id}: {error}");
+                None
+            }
+        };
+        return ix
+            .edit_content(lyrics_reply(&title, lyrics.as_deref()))
+            .await;
+    }
     if is_button {
         let text = match action {
             "queue" => Some(queue_preview(snapshot.as_ref())),
-            "lyrics" => Some(lyrics_content(snapshot.as_ref())),
+
             "eq" => Some("Choose a preset from the EQ menu below.".to_owned()),
             "fx" => Some("Choose an effect from the FX menu below.".to_owned()),
             _ => None,
@@ -1032,6 +1069,22 @@ async fn handle_panel_action(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lyrics_replies() {
+        assert_eq!(
+            lyrics_reply("Song", Some("line one\nline two")),
+            "**Song**\nline one\nline two"
+        );
+        let long = "x".repeat(MAX_LYRICS_CHARS + 50);
+        let reply = lyrics_reply("A B", Some(&long));
+        assert!(reply.ends_with("… https://genius.com/search?q=A%20B"));
+        assert!(reply.chars().count() <= 2000);
+        assert_eq!(
+            lyrics_reply("A B", None),
+            "No lyrics found. Search: https://genius.com/search?q=A%20B"
+        );
+    }
 
     #[test]
     fn durations() {

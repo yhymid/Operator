@@ -196,6 +196,24 @@ impl MusicManager {
         .await
     }
 
+    /// Lyrics of the current track as plain text (LavaLyrics); `None` when there are none.
+    pub async fn lyrics(&self, guild_id: Id<GuildMarker>) -> Result<Option<String>> {
+        let Some(lyrics) = self.node()?.lyrics(&guild_id.to_string()).await? else {
+            return Ok(None);
+        };
+        let text = match lyrics["text"].as_str().filter(|t| !t.trim().is_empty()) {
+            Some(text) => text.to_owned(),
+            None => lyrics["lines"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|line| line["line"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        };
+        Ok((!text.trim().is_empty()).then(|| text.trim().to_owned()))
+    }
+
     pub async fn toggle_fx(&self, guild_id: Id<GuildMarker>, fx: &str) -> Result<Option<Snapshot>> {
         let fx = fx.to_lowercase();
         self.with_active(guild_id, |player| {
@@ -226,6 +244,8 @@ impl MusicManager {
                     player.low_pass = !player.low_pass;
                     player.flags.soft_limiter = !player.flags.soft_limiter;
                 }
+                "normalize" => player.normalization = !player.normalization,
+                "echo" => player.echo = !player.echo,
                 "off" => {
                     if player.flags.vaporwave {
                         toggle_vaporwave(player);
@@ -239,6 +259,8 @@ impl MusicManager {
                     if player.flags.soft_limiter {
                         player.low_pass = !player.low_pass;
                     }
+                    player.normalization = false;
+                    player.echo = false;
                     player.flags.vaporwave = false;
                     player.flags.eight_d = false;
                     player.flags.karaoke = false;

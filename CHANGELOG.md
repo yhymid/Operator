@@ -3,6 +3,21 @@
 Releases are cut by hand when enough has changed. Each release on GitHub uses the matching
 section below as its description.
 
+## Unreleased
+
+### Added
+- Music continues after a bot restart: the bot rejoins the voice channel and plays on from
+  the same track and position (when the restart took under 10 minutes and someone is still
+  listening).
+- A short break in the connection to Lavalink no longer stops the music (session resuming),
+  and after a Lavalink restart every session gets its track and position back.
+- The Lyrics button shows the real lyrics (LavaLyrics + LRCLIB) instead of a search link.
+- Two new effects in the FX menu: Normalize and Echo (LavaDSPX).
+
+### Changed
+- Default volume is 100 %, so Lavalink passes Opus audio through without re-encoding.
+- Tracks start faster (`bufferDurationMs` 225 in the Lavalink config).
+
 ## 2.0 - Rust Update
 
 ### Changed

@@ -14,7 +14,9 @@ lavalink:
       nico: true
       http: true
       local: false
-    bufferDurationMs: 400
+    # Audio buffered before a track starts or after a seek. Lower = faster start; raise it
+    # (e.g. 400) if playback stutters on a slow connection.
+    bufferDurationMs: 225
     frameBufferDurationMs: 5000
     youtubePlaylistLoadLimit: 100
     playerUpdateInterval: 5
@@ -36,6 +38,15 @@ lavalink:
     # https://github.com/topi314/LavaSrc
     - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
       snapshot: false
+
+    # Lyrics for the "Lyrics" button: https://github.com/topi314/LavaLyrics
+    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
+      snapshot: false
+
+    # Extra audio filters (Normalize and Echo in the FX menu):
+    # https://github.com/devoxin/LavaDSPX-Plugin
+    - dependency: "com.github.devoxin:lavadspx-plugin:0.0.5"
+      repository: "https://jitpack.io"
 
 plugins:
   youtube:
@@ -62,7 +73,17 @@ plugins:
       url: "https://cipher.kikkia.dev/"
       userAgent: "operator-bot"
 
+  lavalyrics:
+    # Order in which the lyrics sources are asked.
+    sources:
+      - lrcLib
+      - youtube
+
   lavasrc:
+    # Where Spotify (and other metadata-only) tracks are actually played from, first match
+    # wins. With Deezer enabled (see below) put these two first for FLAC / MP3 320 audio:
+    #   - "dzisrc:%ISRC%"
+    #   - "dzsearch:%QUERY%"
     providers:
       - "ytsearch:\"%ISRC%\""
       - "scsearch:%QUERY%"
@@ -75,6 +96,9 @@ plugins:
       applemusic: false
       deezer: false
       youtube: false
+    lyrics-sources:
+      lrcLib: true      # https://lrclib.net, no account needed
+      youtube: true
     spotify:
       clientId: "SPOTIFY_CLIENT_ID"
       clientSecret: "SPOTIFY_CLIENT_SECRET"
@@ -88,7 +112,11 @@ plugins:
       masterDecryptionKey: "${DEEZER_MASTER_KEY:}"
       arl: "${DEEZER_ARL:}"
       formats: [ "FLAC", "MP3_320", "MP3_256", "MP3_128", "MP3_64", "AAC_64" ]
-      # Set sources.deezer=true only after DEEZER_MASTER_KEY and DEEZER_ARL are configured.
+      # Deezer plays FLAC / MP3 320 (best source quality). It needs both values in the
+      # environment of lavalink.service: DEEZER_ARL (the `arl` cookie of a logged-in Deezer
+      # account; FLAC and 320 need a paid plan) and DEEZER_MASTER_KEY (the track decryption
+      # key, not distributed with LavaSrc). Then set sources.deezer=true above and add the two
+      # dz providers. Discord still sends Opus at the channel bitrate (96-384 kb/s).
 
 logging:
   file:

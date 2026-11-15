@@ -101,7 +101,151 @@ impl MusicManager {
         Ok(restored.len())
     }
 
+    // --- continue after a bot restart ---------------------------------------------------------
+
+    fn restart_state_path(&self, guild_id: Id<GuildMarker>) -> PathBuf {
+        self.queue_state_dir.join(format!("{guild_id}.resume.json"))
+    }
+
+    /// Writes every active session (track objects, position, settings) so the next start can
+    /// continue it. Separate from the queue a user saves with the panel button.
+    async fn save_for_restart(&self) {
+        let players = self.players.lock().await;
+        for player in players.values().filter(|p| p.has_music()) {
+            let (Some(current), Some(channel)) = (&player.current, player.voice_channel_id) else {
+                continue;
+            };
+            let payload = json!({
+                "savedAt": chrono::Utc::now().timestamp_millis(),
+                "voiceChannelId": channel.to_string(),
+                "volume": player.volume,
+                "repeatMode": player.repeat.as_str(),
+                "autoplay": player.autoplay,
+                "paused": player.paused,
+                "positionMs": player.position_ms(),
+                "current": current,
+                "tracks": player.tracks,
+            });
+            let write = || -> Result<()> {
+                std::fs::create_dir_all(&self.queue_state_dir)?;
+                let bytes = serde_json::to_vec(&payload)?;
+                crate::common::fs::write_atomic(&self.restart_state_path(player.guild_id), &bytes)?;
+                Ok(())
+            };
+            let result = write();
+            if let Err(error) = result {
+                tracing::warn!(
+                    "Music: could not save the session of guild={} for the restart: {error}",
+                    player.guild_id
+                );
+            }
+        }
+    }
+
+    /// First node connection after a start: continues the sessions saved by the previous
+    /// shutdown, when it was recent and someone is still in the voice channel.
+    pub(super) async fn resume_after_restart(&self, app: &Arc<App>) {
+        static DONE: AtomicBool = AtomicBool::new(false);
+        if DONE.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(&self.queue_state_dir) else {
+            return;
+        };
+        for path in entries.flatten().map(|e| e.path()) {
+            let Some(guild_id) = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".resume.json"))
+                .and_then(crate::discord::parse_id::<GuildMarker>)
+            else {
+                continue;
+            };
+            let state = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+            // One attempt only: a state that fails must not be retried on every start.
+            let _ = std::fs::remove_file(&path);
+            let Some(state) = state else { continue };
+            match self.continue_session(app, guild_id, &state).await {
+                Ok(true) => tracing::info!(
+                    "Music: continued the session of guild={guild_id} after the restart"
+                ),
+                Ok(false) => {}
+                Err(error) => tracing::warn!(
+                    "Music: could not continue the session of guild={guild_id}: {error}"
+                ),
+            }
+        }
+    }
+
+    async fn continue_session(
+        &self,
+        app: &Arc<App>,
+        guild_id: Id<GuildMarker>,
+        state: &Value,
+    ) -> Result<bool> {
+        let age_ms = chrono::Utc::now().timestamp_millis() - state["savedAt"].as_i64().unwrap_or(0);
+        if !(0..=RESTART_RESUME_MAX_AGE_MS).contains(&age_ms) {
+            return Ok(false);
+        }
+        let Some(channel) = state["voiceChannelId"]
+            .as_str()
+            .and_then(crate::discord::parse_id::<ChannelMarker>)
+        else {
+            return Ok(false);
+        };
+        if state["current"]["encoded"]
+            .as_str()
+            .is_none_or(str::is_empty)
+            || Self::human_listeners(app, channel) == 0
+        {
+            return Ok(false);
+        }
+        let session = self.ensure_session(app, guild_id, channel).await?;
+        let mut players = self.players.lock().await;
+        let Some(player) = players
+            .get_mut(&guild_id)
+            .filter(|p| p.instance == session.instance)
+        else {
+            return Ok(false);
+        };
+        player.current = Some(state["current"].clone());
+        player.tracks = state["tracks"]
+            .as_array()
+            .map(|tracks| tracks.iter().cloned().collect())
+            .unwrap_or_default();
+        player.volume = state["volume"]
+            .as_i64()
+            .unwrap_or(self.default_volume)
+            .clamp(0, 150);
+        player.repeat = Repeat::parse(state["repeatMode"].as_str().unwrap_or_default());
+        player.autoplay = state["autoplay"] == Value::Bool(true);
+        self.play_current(player, false).await?;
+        let paused = state["paused"] == Value::Bool(true);
+        let live = state["current"]["info"]["isStream"] == Value::Bool(true);
+        let position = if live {
+            0
+        } else {
+            state["positionMs"].as_i64().unwrap_or(0).max(0)
+        };
+        if position > 0 || paused {
+            self.node()?
+                .update_player(
+                    &guild_id.to_string(),
+                    &json!({ "position": position, "paused": paused }),
+                    false,
+                )
+                .await?;
+            player.last_position = position;
+            player.last_position_at = Some(Instant::now());
+            player.paused = paused;
+        }
+        Ok(true)
+    }
+
     pub async fn shutdown(&self, app: &App) {
+        self.save_for_restart().await;
         let guilds: Vec<Id<GuildMarker>> = self.players.lock().await.keys().copied().collect();
         for guild_id in guilds {
             self.destroy(app, guild_id, "bot shutdown").await;

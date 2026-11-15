@@ -22,6 +22,9 @@ pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_PORT: u16 = 2333;
 pub const DEFAULT_PASSWORD: &str = "youshallnotpass";
 const RECONNECT_DELAY: Duration = Duration::from_secs(10);
+/// How long Lavalink keeps the players (and buffers their events) after the WebSocket drops,
+/// so a short network break or a reconnect does not stop the music.
+const RESUME_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Debug, Clone)]
 pub struct NodeConfig {
@@ -192,8 +195,8 @@ impl Node {
     }
 
     fn mark_disconnected(&self, events: &mpsc::UnboundedSender<NodeEvent>, reason: String) {
+        // The session id is kept: the next connect offers it to Lavalink to resume the session.
         let was = self.connected.swap(false, Ordering::SeqCst);
-        *self.session_id.write().unwrap_or_else(|p| p.into_inner()) = None;
         if was {
             let _ = events.send(NodeEvent::Disconnected { reason });
         }
@@ -209,11 +212,16 @@ impl Node {
             Ok((HeaderName::from_static(name), HeaderValue::from_str(value)?))
         };
         let mut builder = ClientBuilder::new().uri(&self.ws_url())?;
-        for (name, value) in [
+        let mut headers = vec![
             header("authorization", &self.config.authorization)?,
             header("user-id", &user_id.to_string())?,
             header("client-name", client_name)?,
-        ] {
+        ];
+        if let Some(previous) = self.session_id() {
+            // Lavalink answers `resumed: true` when that session is still waiting for us.
+            headers.push(header("session-id", &previous)?);
+        }
+        for (name, value) in headers {
             builder = builder.add_header(name, value)?;
         }
         let (mut stream, _) = builder.connect().await.context("websocket connect")?;
@@ -243,6 +251,9 @@ impl Node {
                     *self.session_id.write().unwrap_or_else(|p| p.into_inner()) =
                         Some(session_id.clone());
                     self.connected.store(true, Ordering::SeqCst);
+                    if let Err(error) = self.enable_resuming(&session_id).await {
+                        tracing::warn!("Lavalink session resuming could not be enabled: {error}");
+                    }
                     let _ = events.send(NodeEvent::Ready {
                         session_id,
                         resumed: payload["resumed"].as_bool().unwrap_or(false),
@@ -298,6 +309,34 @@ impl Node {
                 Some(body),
             )
             .await
+    }
+
+    async fn enable_resuming(&self, session: &str) -> Result<()> {
+        self.rest
+            .request(
+                Method::PATCH,
+                &format!("/sessions/{session}"),
+                Some(&serde_json::json!({ "resuming": true, "timeout": RESUME_TIMEOUT_SECS })),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Lyrics of the track playing in `guild_id` (LavaLyrics plugin). `None` when no lyrics
+    /// were found (204); an error when nothing plays or the plugin is not installed (404).
+    pub async fn lyrics(&self, guild_id: &str) -> Result<Option<Value>> {
+        let session = self
+            .session_id()
+            .ok_or_else(|| anyhow!("The Lavalink node has no active session."))?;
+        let lyrics = self
+            .rest
+            .request(
+                Method::GET,
+                &format!("/sessions/{session}/players/{guild_id}/track/lyrics"),
+                None,
+            )
+            .await?;
+        Ok((!lyrics.is_null()).then_some(lyrics))
     }
 
     pub async fn destroy_player(&self, guild_id: &str) -> Result<()> {
