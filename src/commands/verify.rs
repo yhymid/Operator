@@ -14,9 +14,9 @@ use twilight_model::id::marker::{
 };
 
 use crate::app::App;
+use crate::common::time::{now_iso, parse_iso};
 use crate::discord::{self, Ix};
 use crate::modules::verification::add_one_month_iso;
-use operator_common::time::{now_iso, parse_iso};
 
 pub const VERIFY_BUTTON_CUSTOM_ID: &str = "verify_button_v1";
 const VERIFY_PANEL_TITLE: &str = "Verification";

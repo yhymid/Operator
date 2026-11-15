@@ -18,7 +18,7 @@ Albo budowanie na VPS (`curl https://sh.rustup.rs -sSf | sh`, potem):
 
 ```bash
 git clone -b discord https://github.com/yhymid/Operator.git && cd Operator
-cargo build --release -p operator-discord
+cargo build --release
 ```
 
 Albo zbuduj lokalnie i skopiuj `target/release/operator-discord` (ta sama architektura CPU).
@@ -29,8 +29,8 @@ Albo zbuduj lokalnie i skopiuj `target/release/operator-discord` (ta sama archit
 sudo mkdir -p /srv/operator/app /srv/operator/data /srv/operator/logs
 sudo chown -R ubuntu:ubuntu /srv/operator
 cp target/release/operator-discord /srv/operator/app/
-cp discord/deploy/.env.example /srv/operator/app/.env            # uzupelnij
-cp discord/deploy/config.example.json /srv/operator/app/config.json
+cp deploy/.env.example /srv/operator/app/.env            # uzupelnij
+cp deploy/config.example.json /srv/operator/app/config.json
 ```
 
 W `.env` warto ustawic:
@@ -56,7 +56,7 @@ cd /srv/operator/app
 ## 4. systemd
 
 ```bash
-sudo cp discord/deploy/operator-discord.service /etc/systemd/system/operator.service
+sudo cp deploy/operator-discord.service /etc/systemd/system/operator.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now operator
 journalctl -u operator -f
@@ -73,8 +73,8 @@ sudo mkdir -p /srv/operator/lavalink && sudo chown ubuntu:ubuntu /srv/operator/l
 cd /srv/operator/lavalink
 curl -LO https://github.com/lavalink-devs/Lavalink/releases/latest/download/Lavalink.jar
 mv Lavalink.jar lavalink.jar
-cp /path/to/Operator/discord/deploy/lavalink/application.yml.example application.yml   # uzupelnij
-sudo cp /path/to/Operator/discord/deploy/lavalink/lavalink.service /etc/systemd/system/
+cp /path/to/Operator/deploy/lavalink/application.yml.example application.yml   # uzupelnij
+sudo cp /path/to/Operator/deploy/lavalink/lavalink.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now lavalink
 journalctl -u lavalink -f        # przy pierwszym starcie: kod OAuth YouTube do potwierdzenia
 ```
@@ -86,7 +86,7 @@ Nie uruchamiaj produkcji przez `nohup` z sesji SSH - proces potrafi zginac po wy
 
 ### Automatyczna aktualizacja pluginu youtube-source
 
-`discord/deploy/lavalink/youtube-plugin-update.{sh,service,timer}` co ~3 h sprawdza najnowszy snapshot
+`deploy/lavalink/youtube-plugin-update.{sh,service,timer}` co ~3 h sprawdza najnowszy snapshot
 w `maven-metadata.xml`. Podmienia wersje w `application.yml` i restartuje Lavalinka tylko, gdy
 `/v4/stats` zwraca `players == 0` (takze bez wstrzymanych sesji); potem sprawdza `/v4/loadtracks`
 i `/youtube/stream/{id}`. Gdy test nie przejdzie - przywraca kopie `application.yml` i `plugins/`,
@@ -97,8 +97,8 @@ blokowana.
 `ReadWritePaths` w `youtube-plugin-update.service` musi wskazywac katalog Lavalinka (`LAVALINK_DIR`).
 
 ```bash
-sudo install -m 755 discord/deploy/lavalink/youtube-plugin-update.sh /usr/local/bin/
-sudo cp discord/deploy/lavalink/youtube-plugin-update.{service,timer} /etc/systemd/system/
+sudo install -m 755 deploy/lavalink/youtube-plugin-update.sh /usr/local/bin/
+sudo cp deploy/lavalink/youtube-plugin-update.{service,timer} /etc/systemd/system/
 sudo mkdir -p /etc/operator   # opcjonalnie youtube-plugin-update.env (chmod 600), np. LAVALINK_PASSWORD=...
 sudo DRY_RUN=1 /usr/local/bin/youtube-plugin-update.sh   # najpierw na sucho
 sudo systemctl daemon-reload && sudo systemctl enable --now youtube-plugin-update.timer

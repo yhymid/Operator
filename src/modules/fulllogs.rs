@@ -23,10 +23,10 @@ use twilight_model::id::marker::{ChannelMarker, GuildMarker, UserMarker};
 use twilight_model::user::User;
 
 use crate::app::{App, SharedApp};
+use crate::common::time::{now_iso, parse_iso};
 use crate::config;
 use crate::discord::{self, FLAG_COMPONENTS_V2, FLAG_EPHEMERAL};
 use crate::util::text::{block, inline, is_snowflake, truncate};
-use operator_common::time::{now_iso, parse_iso};
 
 mod card;
 mod events;

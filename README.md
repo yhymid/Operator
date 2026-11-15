@@ -1,121 +1,119 @@
 # Operator - Discord
 
-Bot Discord napisany w Rust. To jest glowna linia **Discorda**; bot Telegram zyje na galezi
-[`telegram`](https://github.com/yhymid/Operator/tree/telegram). Dawna wersja JS (`discord.js`)
-zostala w historii git (tag `js-final`).
+A Discord bot written in Rust: one small binary, no runtime to install. This branch is the
+**Discord** bot; the Telegram bot lives on the
+[`telegram`](https://github.com/yhymid/Operator/tree/telegram) branch.
 
-## Co potrafi
+## Features
 
-- **AutoClean** - cykliczne czyszczenie kanalow (CRON + strefa czasowa)
-- **AutoMod** - slowa, regexy, linki, zaproszenia, CAPS, duplikaty, wzmianki; `/automod test`
-- **Verify** - panel z captcha, wygasanie roli, wyjatki
-- **Music** - Lavalink v4: kolejka, panel z przyciskami, loop, autoplay, EQ/FX, zapis kolejki
-- **Full Logs** - pelne logi serwera na kanal + pliki JSONL z retencja, eksport, purge
-- **/ytdlp** - pobiera video (yt-dlp) i wysyla na kanal w AV1 (male pliki, odtwarza sie w Discordzie);
-  za duze pliki ida na strone jako player (link wazny 6 h)
-- **Health / Debug** - diagnostyka muzyki, uprawnien i logow; narzedzia ownera (`/cache`, `/dm`)
+- **Music** - Lavalink v4: `/play`, queue, button panel, loop, autoplay, EQ/FX, saved queues
+- **/ytdlp** - downloads a video with yt-dlp and posts it in the channel (AV1, small files that
+  play inline); files too large for Discord get a web player link; `audio:true` posts MP3
+- **Logs** - every server event as a card in a log channel, plus JSONL files with retention,
+  export and purge
+- **AutoMod** - blocked words and regexes, links, invites, caps, duplicates, mentions
+- **Verify** - captcha panel, expiring role, exceptions
+- **AutoClean** - scheduled channel cleanup (cron + time zone)
+- **Diagnostics** - `/health`, `/debug`
+- **Owner tools** - `/cookies`, `/update`, `/sync`, `/servers`, `/presence`, `/restart`, `/cache`
 
-## Struktura
+## Commands
 
-```
-Cargo.toml                 workspace (wspolne wersje zaleznosci, profil release: LTO + strip)
-common/                    wspolny crate: .env, logowanie, atomowy zapis JSON, czas, sygnaly,
-                           net (blokada adresow lokalnych), media (ffprobe/ffmpeg, feature "media")
-discord/
-  src/main.rs              start, petla gateway, CLI (run / commands sync / doctor)
-  src/commands/            komendy slash (/help, /play, /skip, /logs, ...)
-  src/modules/             autoclean, automod, verification,
-                           fulllogs/events/* (handler na zdarzenie), music/* (voice, search, controls, ...)
-  src/lavalink.rs          klient Lavalink v4 (REST + WebSocket)
-  commands.json            definicje komend slash
-  deploy/                  .env.example, config.example.json, operator-discord.service,
-                           lavalink/ (application.yml.example, lavalink.service)
-docs/                      deploy na VPS, roznice wzgledem JS
-scripts/                   deploy.sh (instalacja release'u z rollbackiem), sync-common.sh
-```
+| Group | Commands |
+| --- | --- |
+| Music | `/play` `/pause` `/resume` `/skip` `/stop` `/queue` `/nowplaying` `/volume` `/remove` `/move` `/clear` `/loop` `/reconnect` |
+| Download | `/ytdlp url: [audio:]` |
+| Moderation (admin) | `/automod status\|test\|rule` · `/verify setup\|status\|resend\|exception_add\|exception_remove\|expire\|cleanup` · `/logs setup\|status\|enable\|disable\|channel\|retention\|include_bots\|categories\|preview\|export\|purge\|test` · `/clean now\|set\|reset\|status` · `/dm` |
+| Settings (admin) | `/settings show\|set` · `/health` · `/debug music\|permissions\|logs` |
+| Owner | `/cookies` · `/update target:ytdlp\|lavalink\|server\|operator` · `/sync` · `/servers` · `/presence` · `/restart` · `/cache server` |
+| General | `/help` |
 
-`common/` jest tez na galezi `telegram` i musi byc identyczny: zmieniaj go osobnym commitem,
-potem `scripts/sync-common.sh` przenosi go na druga galaz (CI ostrzega, gdy sie rozjada).
+## Build and run
 
-## Szybki start
-
-Wymagania: Rust (stable, >= 1.88), opcjonalnie Lavalink v4 (Java 17+) dla muzyki,
-`yt-dlp` + `ffmpeg`/`ffprobe` (z `libsvtav1`; `libx264` dla trybu H.264) dla `/ytdlp`.
+Requirements: Rust stable (1.88 or newer). Optional: Lavalink v4 (Java 17+) for music;
+`yt-dlp` and `ffmpeg`/`ffprobe` (with `libsvtav1`; `libx264` for H.264 mode) for `/ytdlp`.
 
 ```bash
-cargo build --release -p operator-discord
-mkdir -p run && cd run
-cp ../discord/deploy/.env.example .env              # uzupelnij BOT_TOKEN i OWNER_IDS
-cp ../discord/deploy/config.example.json config.json
-../target/release/operator-discord doctor           # sprawdza token, config i katalogi
-../target/release/operator-discord commands sync    # rejestruje komendy slash
-../target/release/operator-discord                  # start bota
+git clone -b discord https://github.com/yhymid/Operator.git && cd Operator
+cargo build --release
+cp deploy/.env.example .env                  # fill in BOT_TOKEN and OWNER_IDS
+cp deploy/config.example.json config.json
+./target/release/operator-discord doctor     # checks the token, config and directories
+./target/release/operator-discord            # starts the bot (registers the slash commands)
 ```
 
-Bot czyta `.env`, `config.json`, `cache/` i `logs/` z katalogu, w ktorym go uruchomisz
-(albo ze sciezek `OPERATOR_CONFIG_PATH`, `OPERATOR_DATA_DIR`, `OPERATOR_LOG_DIR`).
-Format tych plikow jest taki sam jak w wersji JS - istniejacy config i stan dzialaja bez zmian.
+The bot reads `.env`, `config.json`, `cache/` and `logs/` from the directory it is started in
+(or from `OPERATOR_CONFIG_PATH`, `OPERATOR_DATA_DIR`, `OPERATOR_LOG_DIR`). All settings are
+described in [`deploy/.env.example`](deploy/.env.example).
 
-## CLI
+Prebuilt Linux binaries are attached to the
+[releases](https://github.com/yhymid/Operator/releases); changes are listed in
+[CHANGELOG.md](CHANGELOG.md).
 
-| Polecenie | Opis |
+| Command line | What it does |
 | --- | --- |
-| `operator-discord` | start bota |
-| `operator-discord doctor` | preflight: token, config, katalogi, owner IDs |
-| `operator-discord commands sync` | sync komend na wszystkich serwerach bota |
-| `operator-discord commands sync --guild=ID[,ID]` | sync dla wybranych serwerow |
-| `operator-discord commands sync --global` / `--clear-global` | komendy globalne |
+| `operator-discord` | starts the bot |
+| `operator-discord doctor` | preflight: token, config, directories, owner IDs |
+| `operator-discord commands sync` | registers the commands in every server (`--guild=ID[,ID]`, `--global`, `--clear-global`) |
 
-Logi: `RUST_LOG=debug` dla szczegolow. Pod systemd znaczniki czasu dodaje journald.
+`RUST_LOG=debug` gives detailed logs.
+
+## Layout
+
+```
+Cargo.toml          the package (release profile: LTO + strip)
+commands.json       slash command definitions
+src/main.rs         startup, gateway loop, command line
+src/commands/       slash commands
+src/modules/        autoclean, automod, verification, fulllogs/, music/
+src/common/         code shared with the Telegram bot (.env, logging, time, URL guard, media)
+src/lavalink.rs     Lavalink v4 client (REST + WebSocket)
+deploy/             .env.example, config.example.json, systemd units, lavalink/
+scripts/            deploy.sh (release install with rollback), ops/ (backup, alerts, /update)
+docs/               server setup
+```
+
+`src/common/` is identical on the `telegram` branch. Change it in its own commit, then run
+`scripts/sync-common.sh` (CI warns when the copies differ).
 
 ## Lavalink
 
-Konfiguracja: `discord/deploy/lavalink/application.yml.example`, usluga systemd:
-`discord/deploy/lavalink/lavalink.service` (Lavalink 4.2+, Java 17+). Pluginy Lavalink pobiera sam.
-Polaczenie bota ustawiasz w `.env` (`LAVALINK_URL` albo `LAVALINK_HOST`/`PORT`/`PASSWORD`/`SECURE`/`NODE_ID`).
-Bez Lavalinka bot dziala, a muzyka laczy sie sama, gdy node wstanie (ponawianie co 10 s).
+Config: [`deploy/lavalink/application.yml.example`](deploy/lavalink/application.yml.example),
+systemd unit: `deploy/lavalink/lavalink.service` (Lavalink 4.2+). Lavalink downloads its
+plugins itself. The connection is set in `.env` (`LAVALINK_URL`, or
+`LAVALINK_HOST`/`PORT`/`PASSWORD`/`SECURE`). The bot runs without Lavalink and connects when
+the node comes up.
 
-YouTube z VPS (sprawdzone 2026-11):
+YouTube from a server address (checked 2026-11):
 
-- plugin youtube-source jako **snapshot** (build z mastera) - wydanie 1.18.2 nie ma poprawek
-  potrzebnych na adresach serwerowni (klient TV, IOS),
-- OAuth wlaczony (odtwarzanie klientem TV), szyfr przez `remoteCipher` (`cipher.kikkia.dev`),
-- zrodlo `ytdlp` w LavaSrc wylaczone - rejestruje sie przed pluginem i przejmuje YouTube,
-- bez `preferIPv6Addresses` - YouTube moze lokalizowac IPv6 serwera w innym kraju niz IPv4.
+- use the youtube-source plugin as a **snapshot** or built from source
+  (`/update target:lavalink`); release 1.18.2 lacks fixes needed on datacenter addresses,
+- OAuth enabled (TV client), deciphering through `remoteCipher`,
+- keep LavaSrc's `ytdlp` source off: it registers before the plugin and takes over YouTube,
+- do not set `preferIPv6Addresses`: YouTube may place the server's IPv6 in another country.
 
 ## /ytdlp
 
-1. yt-dlp pobiera najlepszy obraz i dzwiek (najwyzsza rozdzielczosc i FPS; przy remisie SDR i AV1).
-2. `ffprobe` sprawdza plik: obraz inny niz 8-bitowy AV1 (H.264, HEVC/H.265, VP9, 10-bit/HDR) jest
-   kodowany SVT-AV1 (`-preset 10`, CRF 30, `yuv420p`; `YTDLP_AV1_PRESET`) - Discord pokazuje zamrozony obraz dla HEVC;
-   Opus -> AAC; pasujace strumienie sa kopiowane. Zawsze `+faststart`. Wyjatek: 8-bitowe H.264,
-   ktore miesci sie w limicie (z 10% zapasu), jest tylko przepakowywane - bez kosztownego kodowania AV1.
-   `YTDLP_VIDEO_CODEC=h264` przelacza na H.264 High CRF 18 (najszersza zgodnosc, ok. 2,5x wieksze pliki).
-3. W trakcie widac tylko "Operator is thinking..."; gotowy plik jest wysylany bez tekstu.
-   Plik do `YTDLP_MAX_UPLOAD_BYTES` (domyslnie 25 MiB) idzie jako zalacznik. Wiekszy - albo
-   odrzucony przez Discorda jako za duzy (serwer bez boostow ma nizszy limit) - trafia do
-   `YTDLP_MEDIA_ROOT` jako player pod `YTDLP_MEDIA_BASE_URL`, kasowany po 6 godzinach.
+1. yt-dlp downloads the best video and audio.
+2. `ffprobe` checks the file. Anything other than 8-bit AV1 is encoded with SVT-AV1 (Discord
+   shows a frozen picture for HEVC); Opus becomes AAC; matching streams are copied. 8-bit
+   H.264 that already fits the upload limit is only remuxed. `YTDLP_VIDEO_CODEC=h264`
+   switches to H.264 (widest compatibility, about 2.5x larger files).
+3. A file up to `YTDLP_MAX_UPLOAD_BYTES` (default 25 MiB) is posted as an attachment. A larger
+   one goes to `YTDLP_MEDIA_ROOT` and is linked as a player under `YTDLP_MEDIA_BASE_URL` for
+   6 hours.
 
-Jedno zadanie naraz (kolejne czekaja), lacznie do 14 minut (token Discorda zyje 15). Filmy dluzsze
-niz `YTDLP_MAX_DURATION_SECONDS` (30 min) sa odrzucane, a pobieranie ponad `YTDLP_MAX_DOWNLOAD_BYTES`
-(1 GiB) przerywane. Adresy lokalne/prywatne (127.0.0.1, LAN, 169.254.169.254) sa odrzucane; na czat
-trafia zrozumialy powod bledu, surowe wyjscie yt-dlp tylko do logu.
+One job runs at a time, for at most 14 minutes. Videos longer than
+`YTDLP_MAX_DURATION_SECONDS` (30 min) or larger than `YTDLP_MAX_DOWNLOAD_BYTES` (1 GiB) are
+refused, and so are links to local and private addresses. YouTube needs cookies: the owner
+uploads them with `/cookies`.
 
-Zmienne: `YTDLP_PATH`, `YTDLP_COOKIES_PATH`, `YTDLP_JS_RUNTIME`, `YTDLP_VIDEO_CODEC=h264|av1|source`,
-`YTDLP_VIDEO_CRF`, `YTDLP_AV1_PRESET`, `YTDLP_MAX_DURATION_SECONDS`, `YTDLP_MAX_DOWNLOAD_BYTES`,
-`FFMPEG_PATH`, `FFPROBE_PATH` - opisane w `discord/deploy/.env.example`.
-
-## Rozwoj
+## Development
 
 ```bash
 cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
-To samo sprawdza CI (`.github/workflows/rust.yml`).
-
-## Dokumentacja
-
-- [docs/deploy-vps.md](docs/deploy-vps.md) - deploy na VPS z systemd
-- [docs/differences-from-js.md](docs/differences-from-js.md) - co sie zmienilo wzgledem wersji JS
+CI runs the same checks. Server setup: [docs/deploy-vps.md](docs/deploy-vps.md).

@@ -1,29 +1,49 @@
-[workspace]
-resolver = "3"
-members = ["common", "discord"]
-
-[workspace.package]
-version = "0.1.0"
+[package]
+name = "operator-discord"
+description = "Operator Discord bot."
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.88"
 license = "ISC"
 repository = "https://github.com/yhymid/Operator"
 
-[workspace.dependencies]
+[[bin]]
+name = "operator-discord"
+path = "src/main.rs"
+
+[dependencies]
 anyhow = "1.0.104"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
+chrono-tz = { version = "0.10.4", default-features = false, features = ["std"] }
+croner = "4.0.3"
+fancy-regex = "0.20.2"
+futures-util = { version = "0.3.34", default-features = false, features = ["std", "sink"] }
+http = "1.5.0"
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", default-features = false }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "tls12", "ring", "native-tokio"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "http1", "tokio"] }
+rand = "0.10.3"
+regex = "1.13.1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs", "process", "io-util"] }
+tokio-websockets = { version = "0.13.3", default-features = false, features = ["client", "fastrand", "sha1_smol", "ring", "rustls-native-roots", "rustls-tls12"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "env-filter", "ansi", "std"] }
-operator-common = { path = "common" }
+twilight-cache-inmemory = { version = "0.18.0", features = ["permission-calculator"] }
+twilight-gateway = { version = "0.18.0", default-features = false, features = ["rustls-native-roots", "twilight-http", "zstd"] }
+twilight-http = { version = "0.18.0", default-features = false, features = ["rustls-native-roots", "decompression"] }
+twilight-model = "0.18.0"
+unicode-normalization = "0.1.26"
+url = "2.5.8"
 
-[workspace.lints.rust]
+[lints.rust]
 unsafe_code = "deny"
 
-[workspace.lints.clippy]
+[lints.clippy]
 all = { level = "warn", priority = -1 }
 
 # Small, fast binaries: one codegen unit + LTO, symbols stripped.

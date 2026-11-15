@@ -33,7 +33,7 @@ oneshot). Wynik trafia do `/var/lib/operator-update/<cel>.log`, ktory bot pokazu
 sudo apt install -y git openjdk-21-jdk-headless
 sudo install -m 755 scripts/ops/operator-update.sh /usr/local/bin/
 sudo install -m 755 scripts/deploy.sh /usr/local/bin/operator-deploy.sh
-sudo install -m 755 discord/deploy/lavalink/youtube-plugin-update.sh /usr/local/bin/
+sudo install -m 755 deploy/lavalink/youtube-plugin-update.sh /usr/local/bin/
 sudo cp 'scripts/ops/operator-update@.service' /etc/systemd/system/
 sudo install -m 644 scripts/ops/50-operator-update.rules /etc/polkit-1/rules.d/
 # Sciezki, jesli inne niz domyslne (patrz naglowki skryptow):

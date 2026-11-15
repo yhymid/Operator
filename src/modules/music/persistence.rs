@@ -37,7 +37,7 @@ impl MusicManager {
         // JSON.stringify(payload, null, 2): two-space indent, no trailing newline.
         let bytes = serde_json::to_vec_pretty(&payload)?;
         std::fs::create_dir_all(&self.queue_state_dir)?;
-        operator_common::fs::write_atomic(&self.queue_state_path(guild_id), &bytes)?;
+        crate::common::fs::write_atomic(&self.queue_state_path(guild_id), &bytes)?;
         Ok(count)
     }
 

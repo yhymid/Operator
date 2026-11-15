@@ -15,8 +15,8 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_websockets::{ClientBuilder, Message};
 
+use crate::common::env;
 use crate::rest::JsonClient;
-use operator_common::env;
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_PORT: u16 = 2333;

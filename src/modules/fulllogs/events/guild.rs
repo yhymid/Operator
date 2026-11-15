@@ -18,7 +18,7 @@ impl FullLogs {
         let expires = (invite.max_age > 0)
             .then(|| {
                 DateTime::<Utc>::from_timestamp_micros(invite.created_at.as_micros()).map(|c| {
-                    operator_common::time::to_iso(
+                    crate::common::time::to_iso(
                         c + chrono::Duration::seconds(invite.max_age as i64),
                     )
                 })

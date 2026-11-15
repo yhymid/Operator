@@ -13,9 +13,9 @@ use anyhow::{Result, anyhow, bail};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 
+use crate::common::env;
+use crate::common::media::{Encode, VideoCodec, parse_probe, transcode_args};
 use crate::discord::Ix;
-use operator_common::env;
-use operator_common::media::{Encode, VideoCodec, parse_probe, transcode_args};
 
 const MEDIA_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
@@ -129,13 +129,13 @@ async fn check_target(url: &str) -> Result<(), &'static str> {
     let parsed = url::Url::parse(url).map_err(|_| "Provide a valid URL.")?;
     let host = parsed.host_str().unwrap_or_default();
     let port = parsed.port_or_known_default().unwrap_or(443);
-    operator_common::net::ensure_public_host(host, port)
+    crate::common::net::ensure_public_host(host, port)
         .await
         .map_err(host_error_text)
 }
 
-pub fn host_error_text(error: operator_common::net::HostError) -> &'static str {
-    use operator_common::net::HostError;
+pub fn host_error_text(error: crate::common::net::HostError) -> &'static str {
+    use crate::common::net::HostError;
     match error {
         HostError::Missing => "The URL has no host.",
         HostError::Private => "Local and private addresses are not allowed.",
@@ -246,7 +246,7 @@ async fn find_downloaded_file(directory: &Path) -> Option<PathBuf> {
 /// remuxed instead of spending minutes of CPU on an AV1 encode.
 fn effective_codec(
     configured: VideoCodec,
-    info: &operator_common::media::StreamInfo,
+    info: &crate::common::media::StreamInfo,
     size: u64,
     max_upload_bytes: u64,
 ) -> VideoCodec {

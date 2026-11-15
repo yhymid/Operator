@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use operator_common::env;
+use crate::common::env;
 
 #[derive(Debug, Clone)]
 pub struct OperatorPaths {

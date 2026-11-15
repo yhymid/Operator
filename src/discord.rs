@@ -66,7 +66,7 @@ pub fn panel(title: &str, lines: &[String]) -> Value {
 }
 
 pub fn embed_timestamp_now() -> String {
-    operator_common::time::now_iso()
+    crate::common::time::now_iso()
 }
 
 // ---------------------------------------------------------------------------------------------

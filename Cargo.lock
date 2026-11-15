@@ -822,21 +822,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
-name = "operator-common"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "operator-discord"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -849,7 +836,6 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-util",
- "operator-common",
  "rand",
  "regex",
  "rustls",
@@ -859,6 +845,7 @@ dependencies = [
  "tokio",
  "tokio-websockets",
  "tracing",
+ "tracing-subscriber",
  "twilight-cache-inmemory",
  "twilight-gateway",
  "twilight-http",

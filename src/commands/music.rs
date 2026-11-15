@@ -440,7 +440,7 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
             && matches!(parsed.scheme(), "http" | "https")
         {
             let port = parsed.port_or_known_default().unwrap_or(443);
-            operator_common::net::ensure_public_host(parsed.host_str().unwrap_or_default(), port)
+            crate::common::net::ensure_public_host(parsed.host_str().unwrap_or_default(), port)
                 .await
                 .map_err(|error| anyhow::anyhow!(super::ytdlp::host_error_text(error)))?;
         }

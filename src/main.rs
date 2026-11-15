@@ -8,6 +8,7 @@
 
 mod app;
 mod commands;
+mod common;
 mod config;
 mod discord;
 mod lavalink;
@@ -25,8 +26,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::common::env;
 use anyhow::{Context, Result};
-use operator_common::env;
 use tokio::task::JoinHandle;
 use twilight_cache_inmemory::DefaultInMemoryCache;
 use twilight_gateway::{CloseFrame, Event, EventTypeFlags, Intents, Shard, ShardId, StreamExt};
@@ -217,7 +218,7 @@ fn doctor() -> ExitCode {
 // ---------------------------------------------------------------------------------------------
 
 async fn commands_sync(args: &[String]) -> Result<ExitCode> {
-    operator_common::logging::init(false);
+    crate::common::logging::init(false);
     let mut guild_ids: Vec<String> = Vec::new();
     let (mut global, mut clear_global) = (false, false);
     for arg in args {
@@ -303,7 +304,7 @@ struct Runners {
 }
 
 async fn run() -> Result<ExitCode> {
-    operator_common::logging::init(false);
+    crate::common::logging::init(false);
     let paths = OperatorPaths::from_env();
     let root_config = match config::read(&paths.config_path) {
         Ok(cfg) => cfg,
@@ -345,7 +346,7 @@ async fn run() -> Result<ExitCode> {
     let runners = Arc::new(Mutex::new(Runners::default()));
     let started = Arc::new(AtomicBool::new(false));
 
-    let shutdown = operator_common::shutdown::signal();
+    let shutdown = crate::common::shutdown::signal();
     tokio::pin!(shutdown);
     let reason = loop {
         let item = tokio::select! {

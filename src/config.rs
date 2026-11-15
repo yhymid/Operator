@@ -87,7 +87,7 @@ pub fn update(path: &Path, change: impl FnOnce(&mut Value)) -> Result<(), Config
 
 pub fn write(path: &Path, value: &Value) -> Result<(), ConfigError> {
     assert_valid(value, path)?;
-    operator_common::fs::write_json_atomic(path, value)
+    crate::common::fs::write_json_atomic(path, value)
         .map_err(|error| ConfigError::Io(format!("{error:#}")))
 }
 

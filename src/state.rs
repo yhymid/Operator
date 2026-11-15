@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value, json};
 
-use operator_common::time::{now_iso, parse_iso};
+use crate::common::time::{now_iso, parse_iso};
 
 pub struct StateStore {
     dir: PathBuf,
@@ -128,7 +128,7 @@ impl StateStore {
     }
 
     fn read_file(&self, path: &Path) -> Option<Value> {
-        match operator_common::fs::read_json::<Value>(path) {
+        match crate::common::fs::read_json::<Value>(path) {
             Ok(value) => value,
             Err(error) => {
                 tracing::error!("Cannot read cache {}: {error:#}", path.display());
@@ -189,7 +189,7 @@ impl StateStore {
             if state.get("guildId").is_none_or(|v| v.is_null() || v == "") {
                 state["guildId"] = Value::String(guild_id.to_owned());
             }
-            if let Err(error) = operator_common::fs::write_json_atomic(&path, state) {
+            if let Err(error) = crate::common::fs::write_json_atomic(&path, state) {
                 tracing::error!("Cannot write cache {}: {error:#}", path.display());
             }
             state.clone()

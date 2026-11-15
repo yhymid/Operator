@@ -21,9 +21,9 @@ use twilight_model::id::marker::{ChannelMarker, GuildMarker};
 use unicode_normalization::UnicodeNormalization;
 
 use crate::app::App;
+use crate::common::env;
 use crate::lavalink::{self, Node, NodeEvent, SearchResult};
 use crate::util::text::compact_whitespace;
-use operator_common::env;
 
 mod controls;
 mod events;

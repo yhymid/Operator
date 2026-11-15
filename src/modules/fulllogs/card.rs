@@ -224,8 +224,8 @@ fn subject(entry: &Value) -> Option<(&'static str, String, Option<String>, Optio
 
 fn unix_time(entry: &Value) -> Option<i64> {
     str_field(entry, "ts")
-        .and_then(operator_common::time::parse_iso)
-        .map(operator_common::time::unix_seconds)
+        .and_then(crate::common::time::parse_iso)
+        .map(crate::common::time::unix_seconds)
 }
 
 /// Builds the card for one stored log entry. `header` (title, note) is used by `/logs preview`.
