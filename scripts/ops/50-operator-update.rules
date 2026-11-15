@@ -1,4 +1,4 @@
-// polkit rule: lets the bot user start the update units used by /update on Discord, and
+// polkit rule: lets the bot user start the four update units used by /update on Discord, and
 // nothing else. Install as /etc/polkit-1/rules.d/50-operator-update.rules and change "ubuntu"
 // if the bot runs as another user. systemd passes the unit name and verb as action details.
 polkit.addRule(function (action, subject) {
@@ -7,7 +7,7 @@ polkit.addRule(function (action, subject) {
     }
     var unit = action.lookup("unit");
     var verb = action.lookup("verb");
-    if (verb === "start" && /^operator-update@(ytdlp|lavalink|server)\.service$/.test(unit)) {
+    if (verb === "start" && /^operator-update@(ytdlp|lavalink|server|operator)\.service$/.test(unit)) {
         return polkit.Result.YES;
     }
     return polkit.Result.NOT_HANDLED;
