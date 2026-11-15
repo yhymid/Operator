@@ -1,0 +1,17 @@
+[Unit]
+Description=Operator update: %i (started by /update on Discord)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Optional overrides, see operator-update.sh and youtube-plugin-update.sh.
+EnvironmentFile=-/etc/operator/update.env
+EnvironmentFile=-/etc/operator/youtube-plugin-update.env
+ExecStart=/usr/local/bin/operator-update.sh %i
+# /var/lib/operator-update/<target>.log: last run, read by the bot (no secrets are printed).
+StateDirectory=operator-update
+# A source build of the YouTube plugin takes a few minutes; the bot release waits for idle.
+TimeoutStartSec=45min
+PrivateTmp=true
+SyslogIdentifier=operator-update

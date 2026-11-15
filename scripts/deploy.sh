@@ -14,7 +14,7 @@
 #   REPO           GitHub repository with the releases (yhymid/Operator)
 #   HEALTH_SECONDS how long the unit must stay active after the restart (30)
 #   IDLE_TIMEOUT   how long to wait for an idle bot before giving up (1800 s)
-#   FORCE=1        do not wait for idle
+#   FORCE=1        do not wait for idle, reinstall the same tag
 set -euo pipefail
 
 bot=${1:-}
@@ -30,31 +30,38 @@ case $bot in
         BOT_DIR=${BOT_DIR:-"/home/ubuntu/Main Files/Bots/operator-tg"}
         UNIT=${UNIT:-operator-tg}
         ;;
-    *) echo "uzycie: $0 discord|telegram <tag>" >&2; exit 2 ;;
+    *) echo "usage: $0 discord|telegram <tag>" >&2; exit 2 ;;
 esac
-[[ $tag == "$bot"-v* ]] || { echo "tag musi zaczynac sie od $bot-v" >&2; exit 2; }
+[[ $tag == "$bot"-v* ]] || { echo "the tag must start with $bot-v" >&2; exit 2; }
 REPO=${REPO:-yhymid/Operator}
 HEALTH_SECONDS=${HEALTH_SECONDS:-30}
 IDLE_TIMEOUT=${IDLE_TIMEOUT:-1800}
 
 log() { echo "[deploy $bot] $*"; }
 
+target="$BOT_DIR/$binary"
+installed_tag="$BOT_DIR/.release-tag"
+if [[ ${FORCE:-0} != 1 && -f $installed_tag && $(cat "$installed_tag") == "$tag" ]]; then
+    log "already on $tag, nothing to do"
+    exit 0
+fi
+
 asset="$binary-$tag-x86_64-linux-gnu"
 base="https://github.com/$REPO/releases/download/$tag"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-log "pobieram $asset"
+log "downloading $asset"
 curl -fsSL --retry 3 -o "$work/$asset" "$base/$asset"
 curl -fsSL --retry 3 -o "$work/$asset.sha256" "$base/$asset.sha256"
-(cd "$work" && sha256sum -c "$asset.sha256" >/dev/null) || { log "zla suma SHA256"; exit 1; }
+(cd "$work" && sha256sum -c "$asset.sha256" >/dev/null) || { log "SHA256 mismatch"; exit 1; }
 chmod 755 "$work/$asset"
 
 # Busy = yt-dlp/ffmpeg children in the unit's cgroup, or (discord) a Lavalink player.
 busy() {
     local procs="/sys/fs/cgroup/system.slice/$UNIT.service/cgroup.procs"
     if [[ -r $procs ]] && (($(wc -l <"$procs") > 1)); then
-        echo "procesy potomne w $UNIT"
+        echo "child processes in $UNIT"
         return 0
     fi
     if [[ $bot == discord ]]; then
@@ -73,18 +80,17 @@ busy() {
 if [[ ${FORCE:-0} != 1 ]]; then
     deadline=$((SECONDS + IDLE_TIMEOUT))
     while reason=$(busy); do
-        ((SECONDS < deadline)) || { log "bot nadal zajety ($reason) - przerywam, nic nie zmieniono"; exit 1; }
-        log "czekam: $reason"
+        ((SECONDS < deadline)) || { log "the bot is still busy ($reason) - giving up, nothing changed"; exit 1; }
+        log "waiting: $reason"
         sleep 30
     done
 fi
 
-target="$BOT_DIR/$binary"
 [[ -f $target ]] && cp -p "$target" "$target.prev"
 # New inode: the running process keeps its old file until the restart.
 cp "$work/$asset" "$target.new"
 mv -f "$target.new" "$target"
-log "podmieniono binarke, restart $UNIT"
+log "binary replaced, restarting $UNIT"
 sudo systemctl restart "$UNIT"
 restarts=$(systemctl show -p NRestarts --value "$UNIT")
 
@@ -92,15 +98,16 @@ sleep "$HEALTH_SECONDS"
 # Restart=always would hide a crash loop from is-active alone: compare the restart counter too.
 if systemctl is-active --quiet "$UNIT" &&
     [[ $(systemctl show -p NRestarts --value "$UNIT") == "$restarts" ]]; then
-    log "OK: $UNIT dziala na $tag"
+    echo "$tag" >"$installed_tag"
+    log "OK: $UNIT runs $tag"
     exit 0
 fi
 
-log "$UNIT nie dziala poprawnie po restarcie - przywracam poprzednia binarke"
+log "$UNIT does not run correctly after the restart - restoring the previous binary"
 journalctl -u "$UNIT" -n 20 --no-pager || true
 if [[ -f $target.prev ]]; then
     mv -f "$target.prev" "$target"
     sudo systemctl restart "$UNIT"
-    log "przywrocono poprzednia wersje"
+    log "previous version restored"
 fi
 exit 1
