@@ -18,7 +18,7 @@ const SERVERS_PREFIX: &str = "owner_servers";
 /// `/update` waits for the unit within Discord's 15-minute interaction window.
 const UPDATE_WAIT: Duration = Duration::from_secs(13 * 60);
 const UPDATE_LOG_DIR: &str = "/var/lib/operator-update";
-const UPDATE_TARGETS: [&str; 3] = ["ytdlp", "lavalink", "server"];
+const UPDATE_TARGETS: [&str; 4] = ["ytdlp", "lavalink", "server", "operator"];
 /// Reply budget for the log tail (Discord message limit is 2000 characters).
 const LOG_TAIL_CHARS: usize = 1500;
 
@@ -81,7 +81,7 @@ pub async fn execute_update(ix: &Ix<'_>) -> Result<()> {
     }
     ix.defer(true).await?;
     let unit = format!("operator-update@{target}.service");
-    if target == "server" {
+    if target == "operator" {
         // The script replaces this binary and restarts the bot, so do not wait for it.
         let output = systemctl(&["start", "--no-block", &unit]).await?;
         if !output.status.success() {
@@ -94,9 +94,9 @@ pub async fn execute_update(ix: &Ix<'_>) -> Result<()> {
         }
         return ix
             .edit_content(
-                "Bot update started. If a newer release exists, the bot restarts as soon as \
-                 nothing is playing or downloading; it rolls back by itself when the new \
-                 version does not start. Check later with `/health`.",
+                "Bot update started (Telegram, then Discord). Each bot with a newer release \
+                 restarts as soon as nothing is playing or downloading, and rolls back by \
+                 itself when the new version does not start. Check later with `/health`.",
             )
             .await;
     }

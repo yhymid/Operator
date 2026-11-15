@@ -25,8 +25,11 @@
 #   DRY_RUN=1                             only report what would happen
 #   SOURCE=1                              build from source instead of using the snapshot
 #   SOURCE_REPO / SOURCE_BRANCH           default lavalink-devs/youtube-source, main
-#   BUILD_JAVA_HOME                       JDK used by Gradle 8.10 (17-23); default: the newest
-#                                         /usr/lib/jvm/java-{21,17}-openjdk-* found
+#   BUILD_JAVA_HOME                       JDK used for the build; default: the newest
+#                                         /usr/lib/jvm/java-{21,17}-openjdk-* found.
+#                                         Not Java 25: upstream pins Gradle 8.10, which fails
+#                                         on 25 ("What went wrong: 25.0.5", checked 2026-11-15).
+#                                         The jar targets Java 8 and runs on Lavalink's Java 25.
 # Exit codes: 0 = nothing to do / updated / postponed, 1 = update failed and rolled back, 2 = setup error.
 set -euo pipefail
 

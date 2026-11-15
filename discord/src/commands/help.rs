@@ -47,7 +47,7 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "### Owner",
             "`/cache server id:<guild_id>`",
             "`/cookies text:<cookies.txt> | file:<cookies.txt>` - yt-dlp cookies",
-            "`/update target:ytdlp|lavalink|server` - update yt-dlp, the YouTube plugin or the bot",
+            "`/update target:ytdlp|lavalink|server|operator` - yt-dlp, YouTube plugin, system packages or both bots",
             "`/sync` - register the commands again",
             "`/servers` - list servers, leave one",
             "`/presence type:<kind> text:<text>` - the bot's status",

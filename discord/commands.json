@@ -201,7 +201,7 @@
   },
   {
     "name": "update",
-    "description": "Update yt-dlp, Lavalink's YouTube plugin or the bot (owner only)",
+    "description": "Update yt-dlp, the YouTube plugin, the server or the bots (owner only)",
     "dm_permission": false,
     "default_member_permissions": "8",
     "options": [
@@ -220,8 +220,12 @@
             "value": "lavalink"
           },
           {
-            "name": "server (bot release)",
+            "name": "server (system packages, apt upgrade)",
             "value": "server"
+          },
+          {
+            "name": "operator (Discord + Telegram bots)",
+            "value": "operator"
           }
         ]
       }
