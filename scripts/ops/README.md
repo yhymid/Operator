@@ -5,7 +5,7 @@
 | `operator-backup.sh` + `.service` + `.timer` | codziennie o 4:30 pakuje `.env`, `config.json`, `cache/`, `logs/` i `application.yml` do `~/backups/operator` (chmod 600, 14 dni). `BACKUP_COPY_CMD` moze wyslac kopie poza VPS. |
 | `operator-notify.sh` + `operator-notify@.service` | gdy unit bota padnie, wysyla na kanal Discorda (webhook) nazwe unitu i ostatnie linie logu |
 | `journald-operator.conf` | limit dziennika systemd do 1 GB / 1 miesiaca |
-| `operator-update.sh` + `operator-update@.service` + `50-operator-update.rules` | `/update target:ytdlp|lavalink|server` z Discorda: aktualizacja yt-dlp, pluginu YouTube zbudowanego ze zrodel (`youtube-plugin-update.sh` z `SOURCE=1`) albo bota z wydania na GitHubie (`deploy.sh`). Regula polkit pozwala uzytkownikowi bota uruchomic tylko te trzy unity. |
+| `operator-update.sh` + `operator-update@.service` + `50-operator-update.rules` | `/update target:ytdlp|lavalink|server|operator` z Discorda: yt-dlp, plugin YouTube zbudowany ze zrodel (`youtube-plugin-update.sh` z `SOURCE=1`), pakiety systemu (`apt upgrade`, bez automatycznych restartow uslug) albo oba boty z wydan na GitHubie (`deploy.sh`). Regula polkit pozwala uzytkownikowi bota uruchomic tylko te cztery unity. |
 
 Instalacja:
 
@@ -28,7 +28,8 @@ Bot dziala bez roota, wiec `/update` tylko uruchamia `operator-update@<cel>.serv
 oneshot). Wynik trafia do `/var/lib/operator-update/<cel>.log`, ktory bot pokazuje w odpowiedzi.
 
 ```bash
-# Lavalink z pluginem ze zrodel potrzebuje JDK 17-23 do kompilacji (Gradle 8.10) i gita:
+# Plugin ze zrodel: JDK 21 tylko do kompilacji (Gradle 8.10 upstreamu nie dziala na Javie 25;
+# Lavalink dalej chodzi na 25) i git:
 sudo apt install -y git openjdk-21-jdk-headless
 sudo install -m 755 scripts/ops/operator-update.sh /usr/local/bin/
 sudo install -m 755 scripts/deploy.sh /usr/local/bin/operator-deploy.sh
