@@ -46,8 +46,6 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "### Owner",
             "`/clean mode:now|set|reset|status`",
             "`/cache mode:serverinfo id:<guild_id>`",
-            "`/announce mode:create|now|list|edit|delete`",
-            "`/announce mode:profile_create|profile_list|profile_edit|profile_delete`",
         ],
         _ => &[
             "### Start",
@@ -55,7 +53,6 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "`/ytdlp url:<link>` - download a video to the channel",
             "`/automod ...`, `/verify ...`, `/logs ...`, `/dm ...` - moderation, verify and full logs",
             "`/settings ...`, `/health`, `/debug ...` - configuration and diagnostics",
-            "`/announce ...` - scheduled and instant announcements",
             "`/clean ...`, `/cache ...` - owner tools",
         ],
     };

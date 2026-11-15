@@ -478,14 +478,6 @@ impl<'a> Opts<'a> {
         };
         self.data?.resolved.as_ref()?.attachments.get(id).cloned()
     }
-
-    /// Focused autocomplete option: `(name, typed value)`.
-    pub fn focused(&self) -> Option<(String, String)> {
-        self.options.iter().find_map(|o| match &o.value {
-            CommandOptionValue::Focused(value, _) => Some((o.name.clone(), value.clone())),
-            _ => None,
-        })
-    }
 }
 
 // ---------------------------------------------------------------------------------------------

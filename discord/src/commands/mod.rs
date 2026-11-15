@@ -1,7 +1,6 @@
 //! Slash command manifest, registration (`command-sync.js`) and interaction dispatch
 //! (the `interactionCreate` handler of `main.js`).
 
-pub mod announce;
 pub mod automod;
 pub mod cache;
 pub mod clean;
@@ -205,16 +204,8 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
             }
         }
         InteractionType::ApplicationCommandAutocomplete => {
-            let name = ix.command().map(|c| c.name.as_str()).unwrap_or_default();
-            let result = if name == "announce" {
-                announce::autocomplete(&ix).await
-            } else {
-                Ok(())
-            };
-            if let Err(error) = result {
-                tracing::error!("Autocomplete error: {}", discord::err_text(&error));
-                let _ = ix.autocomplete(Vec::new()).await;
-            }
+            // No command has autocomplete options; answer stale clients with an empty list.
+            let _ = ix.autocomplete(Vec::new()).await;
         }
         InteractionType::ApplicationCommand => {
             if let Err(error) = dispatch_command(&ix).await {
@@ -262,7 +253,6 @@ async fn dispatch_command(ix: &Ix<'_>) -> Result<()> {
         "verify" => verify::execute(ix).await,
         "automod" => automod::execute(ix).await,
         "settings" => settings::execute(ix).await,
-        "announce" => announce::execute(ix).await,
         "logs" => logs::execute(ix).await,
         "health" => diagnostics::execute_health(ix).await,
         "debug" => diagnostics::execute_debug(ix).await,
@@ -329,7 +319,6 @@ mod tests {
                 "reconnect",
                 "verify",
                 "automod",
-                "announce",
                 "logs",
                 "health",
                 "debug",

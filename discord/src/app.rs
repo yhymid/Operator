@@ -9,7 +9,6 @@ use twilight_http::Client as HttpClient;
 use twilight_model::id::Id;
 use twilight_model::id::marker::{ApplicationMarker, GuildMarker, UserMarker};
 
-use crate::modules::announcements::Announcements;
 use crate::modules::autoclean::AutoClean;
 use crate::modules::automod::AutoMod;
 use crate::modules::fulllogs::FullLogs;
@@ -33,7 +32,6 @@ pub struct App {
     pub automod: AutoMod,
     pub fulllogs: FullLogs,
     pub music: MusicManager,
-    pub announcements: Announcements,
     pub shutting_down: AtomicBool,
 }
 

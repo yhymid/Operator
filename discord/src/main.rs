@@ -35,7 +35,6 @@ use twilight_model::id::marker::GuildMarker;
 use twilight_model::user::CurrentUser;
 
 use crate::app::{App, SharedApp};
-use crate::modules::announcements::Announcements;
 use crate::modules::autoclean::AutoClean;
 use crate::modules::automod::AutoMod;
 use crate::modules::fulllogs::{self, FullLogs};
@@ -45,7 +44,6 @@ use crate::paths::OperatorPaths;
 use crate::rest::RawRest;
 use crate::state::StateStore;
 
-const ANNOUNCEMENT_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// discord.js waits for the initial GUILD_CREATE burst before emitting `clientReady`.
 const READY_GUILD_WAIT: Duration = Duration::from_secs(15);
 
@@ -301,7 +299,6 @@ async fn commands_sync(args: &[String]) -> Result<ExitCode> {
 #[derive(Default)]
 struct Runners {
     verification: Option<JoinHandle<()>>,
-    announcements: Option<JoinHandle<()>>,
 }
 
 async fn run() -> Result<ExitCode> {
@@ -340,7 +337,6 @@ async fn run() -> Result<ExitCode> {
         automod: AutoMod::new(&root_config),
         fulllogs: FullLogs::new(&paths.server_logs_dir),
         music: MusicManager::new(&paths.music_queue_dir),
-        announcements: Announcements::new(),
         shutting_down: AtomicBool::new(false),
         paths,
     });
@@ -493,20 +489,9 @@ async fn on_ready(
     verification::cleanup_challenges_on_startup(&app);
     let verification_runner = verification::start_sweep_runner(&app);
     verification::run_sweep(&app, "startup", true).await;
-    app.announcements.run_sweep(&app).await;
-    let sweep_app = app.clone();
-    let announcement_runner = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(ANNOUNCEMENT_SWEEP_INTERVAL);
-        interval.tick().await;
-        loop {
-            interval.tick().await;
-            sweep_app.announcements.run_sweep(&sweep_app).await;
-        }
-    });
     {
         let mut guard = runners.lock().unwrap_or_else(|p| p.into_inner());
         guard.verification = Some(verification_runner);
-        guard.announcements = Some(announcement_runner);
     }
     tracing::info!(
         "Startup finished. Servers: {}. Next cleanup: {}",
@@ -523,10 +508,7 @@ async fn graceful_shutdown(app: &SharedApp, runners: &Mutex<Runners>, reason: &s
     tracing::info!("Shutting down the bot ({reason})...");
     {
         let mut guard = runners.lock().unwrap_or_else(|p| p.into_inner());
-        for handle in [guard.verification.take(), guard.announcements.take()]
-            .into_iter()
-            .flatten()
-        {
+        if let Some(handle) = guard.verification.take() {
             handle.abort();
         }
     }

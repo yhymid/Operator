@@ -2,7 +2,7 @@
 //!
 //! Semantics follow `src/core/state.js`: the file is deep-merged onto the default shape when
 //! loaded, patches are deep-merged on save (arrays and scalars replace), and selected map keys
-//! (verification expirations/challenges/lockouts, announcement webhooks/profiles) are replaced
+//! (verification expirations/challenges/lockouts) are replaced
 //! wholesale so deleted entries really disappear.
 
 use std::collections::HashMap;
@@ -55,12 +55,6 @@ pub fn default_state(guild_id: &str) -> Value {
             "lockouts": {},
             "lastSweepAt": null,
             "lastFullSweepAt": null
-        },
-        "announcements": {
-            "webhooks": {},
-            "profiles": {},
-            "items": [],
-            "lastSweepAt": null
         },
         "logs": {
             "enabled": false,
@@ -488,24 +482,6 @@ impl StateStore {
         }
     }
 
-    // --- announcements ---------------------------------------------------------------------
-
-    pub fn announcements(&self, guild_id: &str) -> Value {
-        self.section(guild_id, "announcements")
-    }
-
-    /// `webhooks` and `profiles` replace; `webhookToken` is stripped from items.
-    pub fn save_announcements(&self, guild_id: &str, mut patch: Value) {
-        if let Some(items) = patch.get_mut("items").and_then(Value::as_array_mut) {
-            for item in items.iter_mut() {
-                if let Some(map) = item.as_object_mut() {
-                    map.remove("webhookToken");
-                }
-            }
-        }
-        self.save_section(guild_id, "announcements", &patch, &["webhooks", "profiles"]);
-    }
-
     // --- logs ------------------------------------------------------------------------------
 
     pub fn logs(&self, guild_id: &str) -> Value {
@@ -571,7 +547,7 @@ mod tests {
 
     /// A state file that fails to parse (truncated by a full disk, edited by hand) must not be
     /// silently replaced by defaults on the next write: it holds the verification roles,
-    /// webhook tokens and announcement schedule of the guild.
+    /// verification state and log settings of the guild.
     #[test]
     fn corrupt_state_file_is_preserved() {
         let (store, dir) = temp_store("corrupt");

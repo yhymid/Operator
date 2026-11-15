@@ -34,15 +34,12 @@ na sciezke do binarki. Poziom logow: `RUST_LOG` (np. `RUST_LOG=debug`).
 | `src/cmds/*.js` | `src/commands/*.rs` |
 | `src/core/command-manifest.js` | `commands.json` (zrzut payloadu z JS) |
 | `src/core/music.js` | `src/modules/music.rs`, `src/lavalink.rs` |
-| `src/core/announcements.js` | `src/modules/announcements.rs` |
 | `src/core/verification.js` + verify z `main.js` | `src/modules/verification.rs` |
 | `src/events/*.js` | `src/modules/{autoclean,automod,fulllogs}.rs` |
 | `src/core/{config,owners,paths,state}.js` | `src/{config,owners,paths,state}.rs` |
 
 ## Swiadome roznice wzgledem JS
 
-- `/announce`: formatowanie tresci nie psuje juz linii zaczynajacych sie od `## `, `**`, `-# `, `>> `
-  ani liczb typu `1.5` (regexy w JS zamienialy je na `# # `, `* *`, `- # `, `> > `, `1. 5`).
 - `/health`, `/debug`: linia runtime pokazuje wersje Rust/twilight zamiast Node.js/discord.js;
   zniknelo ostrzezenie o wersji Node.
 - Reconnect muzyki po restarcie Lavalinka przywraca utwor, pozycje, glosnosc i filtry.

@@ -11,7 +11,6 @@ zostala w historii git (tag `js-final`).
 - **Verify** - panel z captcha, wygasanie roli, wyjatki
 - **Music** - Lavalink v4: kolejka, panel z przyciskami, loop, autoplay, EQ/FX, zapis kolejki
 - **Full Logs** - pelne logi serwera na kanal + pliki JSONL z retencja, eksport, purge
-- **Announcements** - planowane ogloszenia przez webhooki, profile, edycja wyslanych
 - **/ytdlp** - pobiera video (yt-dlp) i wysyla na kanal w AV1 (male pliki, odtwarza sie w Discordzie);
   za duze pliki ida na strone jako player (link wazny 6 h)
 - **Health / Debug** - diagnostyka muzyki, uprawnien i logow; narzedzia ownera (`/cache`, `/dm`)
@@ -25,7 +24,7 @@ common/                    wspolny crate: .env, logowanie, atomowy zapis JSON, c
 discord/
   src/main.rs              start, petla gateway, CLI (run / commands sync / doctor)
   src/commands/            komendy slash (/help, /play, /skip, /logs, ...)
-  src/modules/             autoclean, automod, verification, announcements,
+  src/modules/             autoclean, automod, verification,
                            fulllogs/events/* (handler na zdarzenie), music/* (voice, search, controls, ...)
   src/lavalink.rs          klient Lavalink v4 (REST + WebSocket)
   commands.json            definicje komend slash
