@@ -61,7 +61,7 @@ fn split_list(raw: &str) -> impl Iterator<Item = &str> {
         .filter(|v| !v.is_empty())
 }
 
-pub use operator_common::media::VideoCodec;
+pub use crate::common::media::VideoCodec;
 
 #[derive(Debug, Clone)]
 pub struct Settings {

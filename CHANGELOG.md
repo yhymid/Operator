@@ -3,7 +3,7 @@
 Releases are cut by hand when enough has changed. Each release on GitHub uses the matching
 section below as its description.
 
-## Unreleased
+## 2.0 - Rust Update
 
 ### Changed
 - The bot is written in Rust now (the JavaScript version is gone): one small binary, lower

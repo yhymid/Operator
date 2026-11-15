@@ -33,7 +33,7 @@ fn write(level: &str, message: &str, details: Option<&Value>) {
     };
     let line = format!(
         "[{}] [{}] {message}{suffix}",
-        operator_common::time::now_iso(),
+        crate::common::time::now_iso(),
         level.to_uppercase()
     );
     if level == "log" {

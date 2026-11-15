@@ -2,6 +2,7 @@
 
 mod api;
 mod bot;
+mod common;
 mod limiter;
 mod log;
 mod queue;
@@ -30,7 +31,7 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(25);
 const MAX_CONCURRENT_HANDLERS: usize = 32;
 
 fn main() -> ExitCode {
-    operator_common::env::load_dotenv();
+    crate::common::env::load_dotenv();
     log::init();
     let _ = rustls::crypto::ring::default_provider().install_default();
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -122,7 +123,7 @@ async fn run() -> ExitCode {
         })),
     );
 
-    let shutdown = operator_common::shutdown::signal();
+    let shutdown = crate::common::shutdown::signal();
     tokio::pin!(shutdown);
     let mut offset: i64 = 0;
     let handler_slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_HANDLERS));

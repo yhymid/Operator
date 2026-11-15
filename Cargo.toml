@@ -1,29 +1,43 @@
-[workspace]
-resolver = "3"
-members = ["common", "telegram"]
-
-[workspace.package]
-version = "0.1.0"
+[package]
+name = "operator-telegram"
+description = "Operator Telegram bot."
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.88"
 license = "ISC"
 repository = "https://github.com/yhymid/Operator"
 
-[workspace.dependencies]
+[[bin]]
+name = "operator-telegram"
+path = "src/main.rs"
+
+[dependencies]
 anyhow = "1.0.104"
+bytes = "1.12.1"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", default-features = false }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "tls12", "ring", "native-tokio"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "http1", "tokio"] }
+nix = { version = "0.31.3", default-features = false, features = ["signal", "process"] }
+rand = "0.10.3"
+regex = "1.13.1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs", "process", "io-util"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "env-filter", "ansi", "std"] }
-operator-common = { path = "common" }
+url = "2.5.8"
 
-[workspace.lints.rust]
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "time", "sync", "fs", "process", "io-util", "test-util"] }
+
+[lints.rust]
 unsafe_code = "deny"
 
-[workspace.lints.clippy]
+[lints.clippy]
 all = { level = "warn", priority = -1 }
 
 # Small, fast binaries: one codegen unit + LTO, symbols stripped.
