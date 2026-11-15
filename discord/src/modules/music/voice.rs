@@ -158,20 +158,11 @@ impl MusicManager {
     }
     // --- voice channel status ------------------------------------------------------------------
 
+    /// The JS bot showed the track as the bot's presence; replace that with the status saved
+    /// by `/presence` (or none).
     pub(super) fn clear_legacy_presence(&self, app: &App) {
-        let presence = UpdatePresence {
-            d: UpdatePresencePayload {
-                activities: Vec::new(),
-                afk: false,
-                since: None,
-                status: Status::Online,
-            },
-            op: OpCode::PresenceUpdate,
-        };
-        match app.sender.command(&presence) {
-            Ok(()) => self.legacy_presence_cleared.store(true, Ordering::SeqCst),
-            Err(error) => tracing::warn!("Music presence clear failed: {error}"),
-        }
+        crate::presence::apply(app);
+        self.legacy_presence_cleared.store(true, Ordering::SeqCst);
     }
 
     pub(super) async fn set_voice_status(

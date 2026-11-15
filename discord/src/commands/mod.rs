@@ -10,6 +10,7 @@ pub mod dm;
 pub mod help;
 pub mod logs;
 pub mod music;
+pub mod owner;
 pub mod settings;
 pub mod verify;
 pub mod ytdlp;
@@ -24,7 +25,7 @@ use twilight_model::channel::message::component::ComponentType;
 use twilight_model::id::Id;
 use twilight_model::id::marker::ApplicationMarker;
 
-use crate::app::SharedApp;
+use crate::app::{App, SharedApp};
 use crate::discord::{self, Ix};
 use crate::modules::verification;
 use crate::rest::RawRest;
@@ -149,16 +150,8 @@ pub fn format_report(report: &SyncReport) -> Vec<String> {
     }
 }
 
-/// `registerSlashCommands` run from the Ready handler.
-pub async fn register_on_startup(app: &SharedApp) {
-    if !app.paths.sync_commands_on_startup {
-        if app.startup_verbose {
-            tracing::info!(
-                "Skipping slash command sync on startup (OPERATOR_SYNC_COMMANDS_ON_STARTUP=0)."
-            );
-        }
-        return;
-    }
+/// Registers the manifest in every guild the bot is in (`/sync` and startup).
+pub async fn sync_now(app: &App) -> SyncReport {
     let guilds: Vec<(String, String)> = app
         .guild_ids()
         .into_iter()
@@ -169,7 +162,20 @@ pub async fn register_on_startup(app: &SharedApp) {
             )
         })
         .collect();
-    let report = sync_guilds(&app.raw, app.application_id, &guilds, &[]).await;
+    sync_guilds(&app.raw, app.application_id, &guilds, &[]).await
+}
+
+/// `registerSlashCommands` run from the Ready handler.
+pub async fn register_on_startup(app: &SharedApp) {
+    if !app.paths.sync_commands_on_startup {
+        if app.startup_verbose {
+            tracing::info!(
+                "Skipping slash command sync on startup (OPERATOR_SYNC_COMMANDS_ON_STARTUP=0)."
+            );
+        }
+        return;
+    }
+    let report = sync_now(app).await;
     if report.failures() > 0 || app.startup_verbose {
         for line in format_report(&report) {
             tracing::info!("{line}");
@@ -234,6 +240,9 @@ async fn dispatch_component(ix: &Ix<'_>) -> Result<()> {
     if help::handle_component(ix).await? {
         return Ok(());
     }
+    if owner::handle_component(ix).await? {
+        return Ok(());
+    }
     if music::handle_component(ix).await? {
         return Ok(());
     }
@@ -260,6 +269,11 @@ async fn dispatch_command(ix: &Ix<'_>) -> Result<()> {
         "dm" => dm::execute(ix).await,
         "ytdlp" => ytdlp::execute(ix).await,
         "cookies" => cookies::execute(ix).await,
+        "update" => owner::execute_update(ix).await,
+        "sync" => owner::execute_sync(ix).await,
+        "servers" => owner::execute_servers(ix).await,
+        "presence" => owner::execute_presence(ix).await,
+        "restart" => owner::execute_restart(ix).await,
         music if music::COMMANDS.contains(&music) => music::execute(ix, music).await,
         _ => Ok(()),
     }
@@ -356,6 +370,11 @@ mod tests {
                 "clean",
                 "cache",
                 "cookies",
+                "update",
+                "sync",
+                "servers",
+                "presence",
+                "restart",
                 "play",
                 "pause",
                 "resume",

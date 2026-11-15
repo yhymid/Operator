@@ -34,6 +34,11 @@ fn job_slot() -> &'static tokio::sync::Semaphore {
     SLOT.get_or_init(|| tokio::sync::Semaphore::new(1))
 }
 
+/// `true` while a /ytdlp download or conversion holds the job slot.
+pub fn busy() -> bool {
+    job_slot().available_permits() == 0
+}
+
 struct Settings {
     ytdlp: String,
     ffmpeg: String,

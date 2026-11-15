@@ -47,6 +47,11 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "### Owner",
             "`/cache server id:<guild_id>`",
             "`/cookies text:<cookies.txt> | file:<cookies.txt>` - yt-dlp cookies",
+            "`/update target:ytdlp|lavalink|server` - update yt-dlp, the YouTube plugin or the bot",
+            "`/sync` - register the commands again",
+            "`/servers` - list servers, leave one",
+            "`/presence type:<kind> text:<text>` - the bot's status",
+            "`/restart [force:true]` - restart when nothing plays or downloads",
         ],
         _ => &[
             "### Start",
@@ -54,7 +59,7 @@ fn section_content(page: &str, can_use_owner: bool) -> String {
             "`/ytdlp url:<link>` - download a video to the channel",
             "`/automod`, `/verify`, `/logs`, `/clean`, `/dm` - moderation, verify, logs and cleanup",
             "`/settings ...`, `/health`, `/debug ...` - configuration and diagnostics",
-            "`/cache ...`, `/cookies ...` - owner tools",
+            "`/cache`, `/cookies`, `/update`, `/sync`, `/servers`, `/presence`, `/restart` - owner tools",
         ],
     };
     lines.join("\n")

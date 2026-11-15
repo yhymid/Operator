@@ -288,6 +288,16 @@ impl MusicManager {
         Some(public)
     }
 
+    /// Guilds with a music session (playing, paused or with a queue).
+    pub async fn active_sessions(&self) -> usize {
+        self.players
+            .lock()
+            .await
+            .values()
+            .filter(|p| p.has_music())
+            .count()
+    }
+
     pub async fn clear_queue(&self, guild_id: Id<GuildMarker>) -> Option<usize> {
         let mut players = self.players.lock().await;
         let player = players.get_mut(&guild_id).filter(|p| p.has_music())?;

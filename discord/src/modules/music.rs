@@ -14,13 +14,8 @@ use anyhow::{Result, anyhow, bail};
 use rand::seq::SliceRandom;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
-use twilight_model::gateway::OpCode;
 use twilight_model::gateway::payload::incoming::{VoiceServerUpdate, VoiceStateUpdate};
 use twilight_model::gateway::payload::outgoing::UpdateVoiceState;
-use twilight_model::gateway::payload::outgoing::update_presence::{
-    UpdatePresence, UpdatePresencePayload,
-};
-use twilight_model::gateway::presence::Status;
 use twilight_model::id::Id;
 use twilight_model::id::marker::{ChannelMarker, GuildMarker};
 use unicode_normalization::UnicodeNormalization;
@@ -385,7 +380,7 @@ impl Player {
         }))
     }
 
-    fn has_music(&self) -> bool {
+    pub(crate) fn has_music(&self) -> bool {
         self.current.is_some() || !self.tracks.is_empty() || self.playing
     }
 

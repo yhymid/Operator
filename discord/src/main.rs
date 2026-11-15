@@ -14,6 +14,7 @@ mod lavalink;
 mod modules;
 mod owners;
 mod paths;
+mod presence;
 mod rest;
 mod state;
 mod util;
@@ -338,6 +339,7 @@ async fn run() -> Result<ExitCode> {
         fulllogs: FullLogs::new(&paths.server_logs_dir),
         music: MusicManager::new(&paths.music_queue_dir),
         shutting_down: AtomicBool::new(false),
+        restart: tokio::sync::Notify::new(),
         paths,
     });
     let runners = Arc::new(Mutex::new(Runners::default()));
@@ -348,6 +350,7 @@ async fn run() -> Result<ExitCode> {
     let reason = loop {
         let item = tokio::select! {
             reason = &mut shutdown => break reason,
+            () = app.restart.notified() => break "restart requested",
             item = shard.next_event(EventTypeFlags::all()) => item,
         };
         let Some(item) = item else {
@@ -364,6 +367,10 @@ async fn run() -> Result<ExitCode> {
         let before = fulllogs::capture_before(&app.cache, &event);
         app.cache.update(&event);
 
+        if matches!(event, Event::Ready(_)) {
+            // A new gateway session starts without a presence; send the saved `/presence`.
+            presence::apply(&app);
+        }
         if let Event::Ready(ready) = &event
             && !started.swap(true, Ordering::SeqCst)
         {

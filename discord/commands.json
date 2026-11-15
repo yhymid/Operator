@@ -200,6 +200,109 @@
     ]
   },
   {
+    "name": "update",
+    "description": "Update yt-dlp, Lavalink's YouTube plugin or the bot (owner only)",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 3,
+        "name": "target",
+        "description": "What to update",
+        "required": true,
+        "choices": [
+          {
+            "name": "yt-dlp",
+            "value": "ytdlp"
+          },
+          {
+            "name": "Lavalink YouTube plugin (built from source)",
+            "value": "lavalink"
+          },
+          {
+            "name": "server (bot release)",
+            "value": "server"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sync",
+    "description": "Register the slash commands again without a restart (owner only)",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": []
+  },
+  {
+    "name": "servers",
+    "description": "List the bot's servers; leave one (owner only)",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": []
+  },
+  {
+    "name": "presence",
+    "description": "Set the bot's status (owner only)",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 3,
+        "name": "type",
+        "description": "Kind of status",
+        "required": true,
+        "choices": [
+          {
+            "name": "Playing",
+            "value": "playing"
+          },
+          {
+            "name": "Listening to",
+            "value": "listening"
+          },
+          {
+            "name": "Watching",
+            "value": "watching"
+          },
+          {
+            "name": "Competing in",
+            "value": "competing"
+          },
+          {
+            "name": "Custom text",
+            "value": "custom"
+          },
+          {
+            "name": "Clear",
+            "value": "clear"
+          }
+        ]
+      },
+      {
+        "type": 3,
+        "name": "text",
+        "description": "Status text (max 128 characters)",
+        "required": false,
+        "max_length": 128
+      }
+    ]
+  },
+  {
+    "name": "restart",
+    "description": "Restart the bot when nothing is playing or downloading (owner only)",
+    "dm_permission": false,
+    "default_member_permissions": "8",
+    "options": [
+      {
+        "type": 5,
+        "name": "force",
+        "description": "Restart even if music plays or a download runs",
+        "required": false
+      }
+    ]
+  },
+  {
     "name": "play",
     "description": "Plays a track, playlist or audio file",
     "dm_permission": false,

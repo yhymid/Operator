@@ -33,6 +33,8 @@ pub struct App {
     pub fulllogs: FullLogs,
     pub music: MusicManager,
     pub shutting_down: AtomicBool,
+    /// `/restart`: ends the gateway loop; systemd (`Restart=always`) starts the bot again.
+    pub restart: tokio::sync::Notify,
 }
 
 impl App {
