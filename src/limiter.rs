@@ -25,6 +25,7 @@ struct Item {
     dedupe_key: Option<String>,
     label: String,
     sequence: u64,
+    queued_at: std::time::Instant,
 }
 
 #[derive(Default)]
@@ -84,6 +85,7 @@ impl Limiter {
                 dedupe_key,
                 label: label.to_owned(),
                 sequence: self.sequence.fetch_add(1, Ordering::SeqCst),
+                queued_at: std::time::Instant::now(),
             });
             queue.pending.sort_by(|a, b| {
                 a.priority
@@ -119,9 +121,19 @@ impl Limiter {
                 mut task,
                 respond,
                 label,
+                queued_at,
                 ..
             } = item;
+            let queue_wait = crate::common::diagnostics::elapsed_ms(queued_at);
+            let started = std::time::Instant::now();
             let result = self.execute_with_retry(&key, &label, &mut task).await;
+            crate::common::diagnostics::record(
+                "telegram.call",
+                json!({ "op": label, "chat": key, "queueWaitMs": queue_wait,
+                        "execMs": crate::common::diagnostics::elapsed_ms(started),
+                        "ok": result.is_ok(),
+                        "error": result.as_ref().err().map(|e| e.message.clone()) }),
+            );
             let _ = respond.send(result);
             let mut queues = self.queues.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(queue) = queues.get_mut(&key) {
@@ -155,6 +167,10 @@ impl Limiter {
                         0
                     };
                     let wait_ms = (retry_after * 1000.0).ceil() as u64 + jitter;
+                    crate::common::diagnostics::record(
+                        "telegram.rate_limited",
+                        json!({ "op": label, "chat": key, "attempt": attempt, "waitMs": wait_ms }),
+                    );
                     log::warn(
                         "Telegram ograniczył tempo; ponawiam żądanie po opóźnieniu",
                         Some(json!({

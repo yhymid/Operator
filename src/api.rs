@@ -171,6 +171,8 @@ impl Api {
             .header("Content-Type", "application/json")
             .body(Full::new(Bytes::from(body)))
             .map_err(|e| ApiError::network(e.to_string()))?;
+        let started = std::time::Instant::now();
+        let timing = std::sync::Mutex::new((None, None, None::<String>, 0usize, None::<u16>));
         let exchange = async {
             let response = self
                 .json
@@ -178,18 +180,59 @@ impl Api {
                 .await
                 .map_err(|e| ApiError::network(format!("request to {method} failed: {e}")))?;
             let status = response.status().as_u16();
+            let date = response
+                .headers()
+                .get(hyper::header::DATE)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned);
+            let ttfb = started.elapsed();
             let bytes = response
                 .into_body()
                 .collect()
                 .await
                 .map_err(|e| ApiError::network(format!("request to {method} failed: {e}")))?
                 .to_bytes();
+            *timing.lock().unwrap_or_else(|p| p.into_inner()) = (
+                Some(ttfb),
+                Some(started.elapsed().saturating_sub(ttfb)),
+                date,
+                bytes.len(),
+                Some(status),
+            );
             parse_envelope(status, &bytes, false)
         };
-        match tokio::time::timeout(timeout, exchange).await {
+        let result = match tokio::time::timeout(timeout, exchange).await {
             Ok(result) => result,
             Err(_) => Err(ApiError::network(format!("request to {method} timed out"))),
+        };
+        // Long polling waits by design; it is measured separately (`telegram.poll`).
+        if method != "getUpdates" && crate::common::diagnostics::enabled() {
+            let (ttfb, body, date, bytes, status) =
+                timing.into_inner().unwrap_or_else(|p| p.into_inner());
+            let error = result.as_ref().err().map(|e| e.message.clone());
+            crate::common::diagnostics::HttpTiming {
+                client: "bot-api",
+                method: "POST",
+                host: self.api_host(),
+                path: &format!("/{method}"),
+                status,
+                ttfb,
+                body,
+                total: started.elapsed(),
+                bytes: Some(bytes),
+                date: date.as_deref(),
+                error: error.as_deref(),
+            }
+            .record();
         }
+        result
+    }
+
+    /// Host of the Bot API server (api.telegram.org or the local server), for diagnostics.
+    fn api_host(&self) -> &str {
+        let root = &self.settings.api_root;
+        let rest = root.split_once("://").map_or(root.as_str(), |(_, r)| r);
+        rest.split('/').next().unwrap_or(rest)
     }
 
     /// Telegraf `callApi` as patched in `bot.js`: calls with a `chat_id` go through the
@@ -342,6 +385,7 @@ impl Api {
             .body(body)
             .map_err(|e| ApiError::network(e.to_string()))?;
 
+        let started = std::time::Instant::now();
         let exchange = async {
             let response = self
                 .upload
@@ -356,6 +400,18 @@ impl Api {
                 .map_err(|e| ApiError::network(e.to_string()))?
                 .to_bytes();
             parse_envelope(status, &bytes, true)
+        };
+        let exchange = async {
+            let result = exchange.await;
+            let seconds = started.elapsed().as_secs_f64().max(0.001);
+            crate::common::diagnostics::record(
+                "telegram.upload",
+                json!({ "op": method, "bytes": file_size, "ok": result.is_ok(),
+                        "uploadMs": crate::common::diagnostics::elapsed_ms(started),
+                        "mbPerS": file_size as f64 / 1_048_576.0 / seconds,
+                        "error": result.as_ref().err().map(|e| e.message.clone()) }),
+            );
+            result
         };
         tokio::pin!(exchange);
         // Socket inactivity timeout (`timeout: 10 min` on the Node request).

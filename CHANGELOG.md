@@ -3,6 +3,15 @@
 Releases are cut by hand when enough has changed. Each release on GitHub uses the matching
 section below as its description.
 
+## Unreleased
+
+### Added
+- Optional 24/7 diagnostics (`OPERATOR_DIAGNOSTICS=1`): every event and log line, without
+  tokens or passwords, in `diagnostics/events-YYYY-MM-DD.txt`, and a latency report every
+  15 minutes in `diagnostics/summary-YYYY-MM-DD.md` (message delay, Bot API calls, waiting
+  in the per-chat limiter, rate limits, download / conversion / upload times, memory and
+  CPU).
+
 ## 2.0 - Rust Update
 
 ### Changed

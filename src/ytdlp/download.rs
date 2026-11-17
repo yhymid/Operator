@@ -40,11 +40,25 @@ pub(super) fn spawn_error(program: &str, error: &std::io::Error) -> String {
 }
 
 /// `execFile(program, args, { timeout })` (SIGTERM on timeout).
+/// `process.child` diagnostics event: how long yt-dlp / ffprobe / ffmpeg ran.
+fn record_child(program: &str, started: Instant, ok: bool, timed_out: bool) {
+    crate::common::diagnostics::record(
+        "process.child",
+        json!({
+            "op": Path::new(program).file_name().map_or_else(|| program.to_owned(), |n| n.to_string_lossy().into_owned()),
+            "runMs": crate::common::diagnostics::elapsed_ms(started),
+            "ok": ok,
+            "timedOut": timed_out,
+        }),
+    );
+}
+
 pub(super) async fn exec(
     program: &str,
     args: &[String],
     timeout: Duration,
 ) -> Result<String, ExecFailure> {
+    let started = Instant::now();
     let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::null())
@@ -92,6 +106,12 @@ pub(super) async fn exec(
     };
     let stdout = read_out.await.unwrap_or_default();
     let stderr = read_err.await.unwrap_or_default();
+    record_child(
+        program,
+        started,
+        status.is_some_and(|s| s.success()),
+        status.is_none(),
+    );
     if status.is_some_and(|s| s.success()) {
         return Ok(stdout);
     }
@@ -247,6 +267,7 @@ impl Bot {
         job: &Arc<Job>,
     ) -> Result<(), String> {
         let program = &self.settings.ytdlp_path;
+        let started = Instant::now();
         let mut child = Command::new(program)
             .args(args)
             .current_dir(directory)
@@ -296,9 +317,11 @@ impl Bot {
                 .map(|p| Box::new(p) as Box<dyn tokio::io::AsyncRead + Unpin + Send>),
         );
         let timeout = Duration::from_secs_f64(self.settings.download_timeout_secs.max(0.0));
+        let mut timed_out = false;
         let status = tokio::select! {
             status = child.wait() => status,
             () = self.queue.sleep_active(timeout) => {
+                timed_out = true;
                 if let Some(pid) = child.id() {
                     let _ = crate::queue::signal_group(pid, Signal::SIGKILL);
                 }
@@ -307,6 +330,12 @@ impl Bot {
             }
         };
         job.set_process(None);
+        record_child(
+            program,
+            started,
+            status.as_ref().is_ok_and(|s| s.success()),
+            timed_out,
+        );
         let stdout = stdout.await.unwrap_or_default();
         let stderr = stderr.await.unwrap_or_default();
         let status = status.map_err(|e| e.to_string())?;
@@ -457,14 +486,22 @@ impl Bot {
             }
             String::from_utf8_lossy(&buf).into_owned()
         });
+        let mut timed_out = false;
         let status = tokio::select! {
             status = child.wait() => status,
             () = self.queue.sleep_active(timeout) => {
+                timed_out = true;
                 let _ = child.start_kill();
                 child.wait().await
             }
         };
         job.set_process(None);
+        record_child(
+            &self.settings.ffmpeg_path,
+            started,
+            status.as_ref().is_ok_and(|s| s.success()),
+            timed_out,
+        );
         let stderr = stderr.await.unwrap_or_default();
         if !status.is_ok_and(|s| s.success()) {
             let last = stderr

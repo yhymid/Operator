@@ -90,6 +90,25 @@ unit and rolls back when it does not come up. The unit of a Local Bot API Server
 
 `YTDLP_VIDEO_CRF` changes the conversion quality (lower = better and larger).
 
+## Diagnostics
+
+`OPERATOR_DIAGNOSTICS=1` in `.env` turns on a recorder that runs next to the bot and never
+slows it down (its own thread, a bounded queue; events are dropped and counted when the disk
+cannot keep up):
+
+- `diagnostics/events-YYYY-MM-DD.txt` - one JSON object per line: every log line and every
+  measured event, with tokens, passwords and webhook URLs removed. Files are readable only by
+  the bot's user.
+- `diagnostics/summary-YYYY-MM-DD.md` - rewritten every 15 minutes and at shutdown: p50 /
+  p90 / p99 of every measured time, failures and status codes, memory and CPU, anomalies,
+  the most frequent warnings, and hints on what causes the delay.
+
+Measured: how long a message took to reach the bot and to be handled, every Bot API call
+(time to first byte, status, server clock), time spent in the per-chat limiter, rate limits,
+the job stages (queue, download, conversion, upload speed), yt-dlp/ffmpeg run times, how
+late the runtime wakes timers, memory, CPU and child processes. Old days are deleted after `OPERATOR_DIAGNOSTICS_RETENTION_DAYS`
+(14); one day's file stops growing at `OPERATOR_DIAGNOSTICS_MAX_FILE_MB` (256).
+
 ## Development
 
 ```bash

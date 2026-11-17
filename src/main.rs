@@ -71,6 +71,7 @@ async fn run() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    start_diagnostics();
     let queue = Queue::new(
         "ytdlp",
         settings.queue_concurrency,
@@ -130,10 +131,19 @@ async fn run() -> ExitCode {
     let outcome = loop {
         let request = json!({ "timeout": POLL_TIMEOUT_SECS, "offset": offset });
         let poll = api.raw_call("getUpdates", &request, POLL_HTTP_TIMEOUT);
+        let poll_started = std::time::Instant::now();
         let updates = tokio::select! {
             signal = &mut shutdown => break Ok(signal),
             result = poll => result,
         };
+        if crate::common::diagnostics::enabled() {
+            crate::common::diagnostics::record(
+                "telegram.poll",
+                json!({ "waitedMs": crate::common::diagnostics::elapsed_ms(poll_started),
+                        "updates": updates.as_ref().ok().and_then(Value::as_array).map(Vec::len),
+                        "ok": updates.is_ok() }),
+            );
+        }
         let updates = match updates {
             Ok(Value::Array(updates)) => updates,
             Ok(_) => Vec::new(),
@@ -177,8 +187,17 @@ async fn run() -> ExitCode {
                         id.to_string()
                     }
                 );
+                let diagnostics = crate::common::diagnostics::enabled()
+                    .then(|| (std::time::Instant::now(), update_diagnostics(&update)));
                 let mut handle = tokio::spawn(bot::handle_update(bot, update));
-                match tokio::time::timeout(timeout, &mut handle).await {
+                let outcome = tokio::time::timeout(timeout, &mut handle).await;
+                if let Some((started, mut payload)) = diagnostics {
+                    payload["handleMs"] = json!(crate::common::diagnostics::elapsed_ms(started));
+                    payload["ok"] = json!(matches!(outcome, Ok(Ok(Ok(())))));
+                    payload["timedOut"] = json!(outcome.is_err());
+                    crate::common::diagnostics::record("telegram.update", payload);
+                }
+                match outcome {
                     Ok(Ok(Ok(()))) => {}
                     Ok(Ok(Err(error))) => log::error(&label, Some(log::error_value(&error))),
                     Ok(Err(join)) => log::error(&label, Some(json!(join.to_string()))),
@@ -217,10 +236,64 @@ async fn run() -> ExitCode {
             while queue.active_count() > 0 && tokio::time::Instant::now() < deadline {
                 tokio::time::sleep(Duration::from_millis(250)).await;
             }
+            crate::common::diagnostics::record("diagnostics.stopped", json!({ "reason": signal }));
+            crate::common::diagnostics::flush();
             ExitCode::SUCCESS
         }
         Err(error) => launch_failed(&error),
     }
+}
+
+/// `OPERATOR_DIAGNOSTICS=1`: events and latency summaries in `diagnostics/`.
+fn start_diagnostics() {
+    use crate::common::diagnostics;
+    let base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let Some(options) = diagnostics::Options::from_env(&base) else {
+        return;
+    };
+    let dir = options.dir.display().to_string();
+    match diagnostics::init(
+        options,
+        "operator-telegram",
+        diagnostics::secrets_from_env(),
+    ) {
+        Ok(()) => {
+            log::info("Diagnostyka zapisywana", Some(json!({ "dir": dir })));
+            diagnostics::spawn_sampler();
+        }
+        Err(error) => log::warn("Diagnostyka wyłączona", Some(json!({ "error": error }))),
+    }
+}
+
+/// Kind of an update and, for messages, how long ago Telegram received it (1 s resolution).
+fn update_diagnostics(update: &Value) -> Value {
+    let kind = update
+        .as_object()
+        .and_then(|map| map.keys().find(|k| k.as_str() != "update_id").cloned())
+        .unwrap_or_else(|| "unknown".to_owned());
+    let message = &update[kind.as_str()];
+    let text = message["text"].as_str().unwrap_or_default();
+    let op = if text.starts_with('/') {
+        let command = text.split_whitespace().next().unwrap_or_default();
+        format!("{kind} {}", command.split('@').next().unwrap_or(command))
+    } else {
+        kind.clone()
+    };
+    let mut payload = json!({ "op": op });
+    // A callback's `message.date` is when the button's message was sent, not the click.
+    if kind != "callback_query"
+        && let Some(date) = message["date"].as_i64()
+    {
+        let age = chrono::Utc::now().timestamp_millis() - date * 1000;
+        payload["ageMs"] = json!(age);
+        if age < -2_000 {
+            crate::common::diagnostics::anomaly(
+                "message_from_future",
+                json!({ "ageMs": age, "op": payload["op"] }),
+            );
+        }
+    }
+    payload
 }
 
 fn launch_failed(error: &ApiError) -> ExitCode {

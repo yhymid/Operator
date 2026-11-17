@@ -26,6 +26,8 @@ pub fn error_value(error: &anyhow::Error) -> Value {
 }
 
 fn write(level: &str, message: &str, details: Option<&Value>) {
+    let diagnostics_level = if level == "log" { "info" } else { level };
+    crate::common::diagnostics::log_line(diagnostics_level, message, details);
     let suffix = match details {
         None => String::new(),
         Some(Value::String(text)) => format!(" {text}"),
