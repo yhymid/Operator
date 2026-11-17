@@ -7,6 +7,7 @@
 // uses only part of it.
 #![allow(dead_code)]
 
+pub mod diagnostics;
 pub mod env;
 pub mod fs;
 pub mod logging;
