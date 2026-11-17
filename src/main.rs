@@ -139,7 +139,8 @@ async fn run() -> ExitCode {
         if crate::common::diagnostics::enabled() {
             crate::common::diagnostics::record(
                 "telegram.poll",
-                json!({ "waitedMs": crate::common::diagnostics::elapsed_ms(poll_started),
+                // Seconds, not `*Ms`: an idle long poll is waiting, not latency.
+                json!({ "waitedS": (poll_started.elapsed().as_secs_f64() * 10.0).round() / 10.0,
                         "updates": updates.as_ref().ok().and_then(Value::as_array).map(Vec::len),
                         "ok": updates.is_ok() }),
             );
