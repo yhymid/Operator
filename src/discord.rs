@@ -78,6 +78,11 @@ pub struct Ix<'a> {
     pub interaction: &'a Interaction,
     replied: AtomicBool,
     deferred: AtomicBool,
+    /// When the gateway delivered the interaction (diagnostics).
+    pub received: std::time::Instant,
+    /// Milliseconds from `received` to the first answer (`u64::MAX` = none yet).
+    first_response_ms: std::sync::atomic::AtomicU64,
+    first_response_kind: std::sync::Mutex<&'static str>,
 }
 
 impl<'a> Ix<'a> {
@@ -87,6 +92,35 @@ impl<'a> Ix<'a> {
             interaction,
             replied: AtomicBool::new(false),
             deferred: AtomicBool::new(false),
+            received: std::time::Instant::now(),
+            first_response_ms: std::sync::atomic::AtomicU64::new(u64::MAX),
+            first_response_kind: std::sync::Mutex::new(""),
+        }
+    }
+
+    /// First answer: time since the gateway delivered the interaction, and its kind.
+    pub fn first_response(&self) -> Option<(u64, &'static str)> {
+        let ms = self.first_response_ms.load(Ordering::SeqCst);
+        (ms != u64::MAX).then(|| {
+            let kind = *self
+                .first_response_kind
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            (ms, kind)
+        })
+    }
+
+    fn mark_first_response(&self, kind: &'static str) {
+        let ms = self.received.elapsed().as_millis() as u64;
+        if self
+            .first_response_ms
+            .compare_exchange(u64::MAX, ms, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            *self
+                .first_response_kind
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = kind;
         }
     }
 
@@ -205,13 +239,19 @@ impl<'a> Ix<'a> {
             }
             None => None,
         };
+        let label = response_label(kind);
         let response = InteractionResponse { kind, data };
-        self.app
-            .http
-            .interaction(self.app.application_id)
-            .create_response(self.interaction.id, &self.interaction.token, &response)
-            .await
-            .context("create interaction response")?;
+        timed(
+            "interaction.callback",
+            label,
+            self.app
+                .http
+                .interaction(self.app.application_id)
+                .create_response(self.interaction.id, &self.interaction.token, &response),
+        )
+        .await
+        .context("create interaction response")?;
+        self.mark_first_response(label);
         Ok(())
     }
 
@@ -241,12 +281,17 @@ impl<'a> Ix<'a> {
             kind: InteractionResponseType::ChannelMessageWithSource,
             data: Some(data),
         };
-        self.app
-            .http
-            .interaction(self.app.application_id)
-            .create_response(self.interaction.id, &self.interaction.token, &response)
-            .await
-            .context("create interaction response")?;
+        timed(
+            "interaction.callback",
+            "reply_file",
+            self.app
+                .http
+                .interaction(self.app.application_id)
+                .create_response(self.interaction.id, &self.interaction.token, &response),
+        )
+        .await
+        .context("create interaction response")?;
+        self.mark_first_response("reply_file");
         self.replied.store(true, Ordering::SeqCst);
         Ok(())
     }
@@ -315,22 +360,36 @@ impl<'a> Ix<'a> {
         if !files.is_empty() {
             request = request.attachments(&files);
         }
-        request.await.context("edit interaction reply")?;
+        timed("interaction.edit", "edit", request)
+            .await
+            .context("edit interaction reply")?;
         Ok(())
     }
 
     /// Edit the reply with a single (possibly large) attachment without JSON-encoding the bytes.
     pub async fn edit_with_file(&self, content: &str, name: &str, bytes: Vec<u8>) -> Result<()> {
         let body = serde_json::to_vec(&no_pings(json!({ "content": content })))?;
+        let size = bytes.len();
         let files = [HttpAttachment::from_bytes(name.to_owned(), bytes, 0)];
-        self.app
-            .http
-            .interaction(self.app.application_id)
-            .update_response(&self.interaction.token)
-            .payload_json(&body)
-            .attachments(&files)
-            .await
-            .context("edit interaction reply")?;
+        let started = std::time::Instant::now();
+        let result = timed(
+            "interaction.edit",
+            "edit_file",
+            self.app
+                .http
+                .interaction(self.app.application_id)
+                .update_response(&self.interaction.token)
+                .payload_json(&body)
+                .attachments(&files),
+        )
+        .await;
+        crate::common::diagnostics::record(
+            "discord.upload",
+            json!({ "op": "interaction file", "bytes": size, "ok": result.is_ok(),
+                    "uploadMs": crate::common::diagnostics::elapsed_ms(started),
+                    "mbPerS": size as f64 / 1_048_576.0 / started.elapsed().as_secs_f64().max(0.001) }),
+        );
+        result.context("edit interaction reply")?;
         Ok(())
     }
 
@@ -341,13 +400,17 @@ impl<'a> Ix<'a> {
     /// `interaction.followUp(payload)`
     pub async fn follow_up(&self, payload: Value) -> Result<()> {
         let body = serde_json::to_vec(&no_pings(payload))?;
-        self.app
-            .http
-            .interaction(self.app.application_id)
-            .create_followup(&self.interaction.token)
-            .payload_json(&body)
-            .await
-            .context("interaction follow-up")?;
+        timed(
+            "interaction.followup",
+            "follow_up",
+            self.app
+                .http
+                .interaction(self.app.application_id)
+                .create_followup(&self.interaction.token)
+                .payload_json(&body),
+        )
+        .await
+        .context("interaction follow-up")?;
         Ok(())
     }
 }
@@ -575,8 +638,57 @@ pub async fn send_message(
     if !files.is_empty() {
         request = request.attachments(&files);
     }
-    let message = request.await?.model().await?;
+    let message = timed("channel.message", "create", request)
+        .await?
+        .model()
+        .await?;
     Ok(message)
+}
+
+fn response_label(kind: InteractionResponseType) -> &'static str {
+    match kind {
+        InteractionResponseType::ChannelMessageWithSource => "reply",
+        InteractionResponseType::DeferredChannelMessageWithSource => "defer",
+        InteractionResponseType::DeferredUpdateMessage => "defer_update",
+        InteractionResponseType::UpdateMessage => "update",
+        InteractionResponseType::Modal => "modal",
+        InteractionResponseType::ApplicationCommandAutocompleteResult => "autocomplete",
+        _ => "other",
+    }
+}
+
+/// Awaits a twilight-http request and records its duration, status and rate limits
+/// (`discord.rest` / `discord.rate_limited`).
+pub async fn timed<T>(
+    route: &str,
+    label: &str,
+    request: impl std::future::IntoFuture<Output = Result<T, twilight_http::Error>>,
+) -> Result<T, twilight_http::Error> {
+    let started = std::time::Instant::now();
+    let result = request.into_future().await;
+    if crate::common::diagnostics::enabled() {
+        let total = crate::common::diagnostics::elapsed_ms(started);
+        let status = match &result {
+            Ok(_) => Some(200),
+            Err(error) => match error.kind() {
+                twilight_http::error::ErrorType::Response { status, .. } => Some(status.get()),
+                _ => None,
+            },
+        };
+        let error = result.as_ref().err().map(api_error_message);
+        crate::common::diagnostics::record(
+            "discord.rest",
+            json!({ "op": format!("{route} {label}"), "totalMs": total, "status": status,
+                    "ok": result.is_ok(), "error": error }),
+        );
+        if status == Some(429) {
+            crate::common::diagnostics::record(
+                "discord.rate_limited",
+                json!({ "op": route, "error": error }),
+            );
+        }
+    }
+    result
 }
 
 /// Readable error text for logs/replies (`error.message`). Discord API errors are reduced to

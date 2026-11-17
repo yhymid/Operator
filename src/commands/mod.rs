@@ -189,10 +189,13 @@ pub async fn register_on_startup(app: &SharedApp) {
 
 pub async fn dispatch(app: SharedApp, interaction: Interaction) {
     let ix = Ix::new(&app, &interaction);
+    let mut error_text: Option<String> = None;
     match interaction.kind {
         InteractionType::MessageComponent => {
             if let Err(error) = dispatch_component(&ix).await {
-                tracing::error!("Component interaction error: {}", discord::err_text(&error));
+                let text = discord::err_text(&error);
+                tracing::error!("Component interaction error: {text}");
+                error_text = Some(text);
                 if !ix.replied() && !ix.deferred() {
                     let _ = ix
                         .reply_ephemeral("An error occurred while handling the panel.")
@@ -202,7 +205,9 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
         }
         InteractionType::ModalSubmit => {
             if let Err(error) = verification::handle_modal(&ix).await {
-                tracing::error!("Verify captcha modal error: {}", discord::err_text(&error));
+                let text = discord::err_text(&error);
+                tracing::error!("Verify captcha modal error: {text}");
+                error_text = Some(text);
                 if !ix.replied() && !ix.deferred() {
                     let _ = ix
                         .reply_ephemeral("An error occurred while checking the captcha.")
@@ -216,7 +221,9 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
         }
         InteractionType::ApplicationCommand => {
             if let Err(error) = dispatch_command(&ix).await {
-                tracing::error!("Interaction error: {}", discord::err_text(&error));
+                let text_log = discord::err_text(&error);
+                tracing::error!("Interaction error: {text_log}");
+                error_text = Some(text_log);
                 let text = "An error occurred while running the command.";
                 let _ = if !ix.replied() && !ix.deferred() {
                     ix.reply_ephemeral(text).await
@@ -226,6 +233,66 @@ pub async fn dispatch(app: SharedApp, interaction: Interaction) {
             }
         }
         _ => {}
+    }
+    record_interaction(&ix, error_text);
+}
+
+/// `interaction` diagnostics event: gateway delay (snowflake time to delivery), time to the
+/// first answer (Discord allows 3 s) and total handling time.
+fn record_interaction(ix: &Ix<'_>, error: Option<String>) {
+    use crate::common::diagnostics;
+    if !diagnostics::enabled() {
+        return;
+    }
+    let total = diagnostics::elapsed_ms(ix.received);
+    let gateway_delay = diagnostics::snowflake_age_ms(ix.interaction.id.get()) - total;
+    let op = interaction_label(ix);
+    let first = ix.first_response();
+    if first.is_none() && ix.interaction.kind != InteractionType::Ping {
+        diagnostics::anomaly(
+            "interaction_unanswered",
+            serde_json::json!({ "op": op, "totalMs": total }),
+        );
+    }
+    diagnostics::record(
+        "interaction",
+        serde_json::json!({
+            "op": op,
+            "guild": ix.guild_id().map(|g| g.to_string()),
+            "user": ix.user_id().to_string(),
+            "gatewayDelayMs": gateway_delay,
+            "firstResponseMs": first.map(|(ms, _)| ms),
+            "firstResponse": first.map(|(_, kind)| kind),
+            "totalMs": total,
+            "ok": error.is_none(),
+            "error": error,
+        }),
+    );
+}
+
+/// `/name sub` for commands, the custom id without ids for components and modals.
+fn interaction_label(ix: &Ix<'_>) -> String {
+    if let Some(command) = ix.command() {
+        let sub = command.options.first().filter(|o| {
+            matches!(
+                o.value,
+                twilight_model::application::interaction::application_command::CommandOptionValue::SubCommand(_)
+                    | twilight_model::application::interaction::application_command::CommandOptionValue::SubCommandGroup(_)
+            )
+        });
+        return match sub {
+            Some(sub) => format!("/{} {}", command.name, sub.name),
+            None => format!("/{}", command.name),
+        };
+    }
+    match ix.custom_id() {
+        Some(id) => id
+            .split(':')
+            .filter(|part| !part.is_empty() && !part.chars().all(|c| c.is_ascii_digit()))
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(":"),
+        None => format!("{:?}", ix.interaction.kind),
     }
 }
 

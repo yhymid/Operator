@@ -106,6 +106,8 @@ pub struct Node {
     stats: Mutex<Value>,
     shutdown: AtomicBool,
     wake: tokio::sync::Notify,
+    /// Guild id → when a new track was sent to the player (diagnostics: time to TrackStart).
+    pending_starts: Mutex<std::collections::HashMap<String, std::time::Instant>>,
 }
 
 impl Node {
@@ -124,6 +126,7 @@ impl Node {
             stats: Mutex::new(Value::Null),
             shutdown: AtomicBool::new(false),
             wake: tokio::sync::Notify::new(),
+            pending_starts: Mutex::new(std::collections::HashMap::new()),
         })
     }
 
@@ -224,6 +227,7 @@ impl Node {
         for (name, value) in headers {
             builder = builder.add_header(name, value)?;
         }
+        let connect_started = std::time::Instant::now();
         let (mut stream, _) = builder.connect().await.context("websocket connect")?;
 
         while let Some(message) = stream.next().await {
@@ -254,21 +258,38 @@ impl Node {
                     if let Err(error) = self.enable_resuming(&session_id).await {
                         tracing::warn!("Lavalink session resuming could not be enabled: {error}");
                     }
+                    let resumed = payload["resumed"].as_bool().unwrap_or(false);
+                    crate::common::diagnostics::record(
+                        "lavalink.connect",
+                        serde_json::json!({ "op": self.config.id, "resumed": resumed,
+                            "connectMs": crate::common::diagnostics::elapsed_ms(connect_started) }),
+                    );
                     let _ = events.send(NodeEvent::Ready {
                         session_id,
-                        resumed: payload["resumed"].as_bool().unwrap_or(false),
+                        resumed,
                     });
                 }
                 "stats" => {
+                    record_stats(&payload);
                     *self.stats.lock().unwrap_or_else(|p| p.into_inner()) = payload;
                 }
                 "playerUpdate" => {
+                    if crate::common::diagnostics::enabled() {
+                        let state = &payload["state"];
+                        crate::common::diagnostics::record(
+                            "lavalink.player",
+                            serde_json::json!({ "guild": payload["guildId"],
+                                "pingMs": state["ping"].as_f64().filter(|p| *p >= 0.0),
+                                "connected": state["connected"] }),
+                        );
+                    }
                     let _ = events.send(NodeEvent::PlayerUpdate {
                         guild_id: payload["guildId"].as_str().unwrap_or_default().to_owned(),
                         state: payload["state"].clone(),
                     });
                 }
                 "event" => {
+                    self.record_event(&payload);
                     let _ = events.send(NodeEvent::Event {
                         guild_id: payload["guildId"].as_str().unwrap_or_default().to_owned(),
                         payload,
@@ -284,13 +305,51 @@ impl Node {
 
     pub async fn load_tracks(&self, identifier: &str) -> Result<Value> {
         let encoded: String = url::form_urlencoded::byte_serialize(identifier.as_bytes()).collect();
-        self.rest
+        let started = std::time::Instant::now();
+        let result = self
+            .rest
             .request(
                 Method::GET,
                 &format!("/loadtracks?identifier={encoded}"),
                 None,
             )
-            .await
+            .await;
+        if crate::common::diagnostics::enabled() {
+            // `ytsearch` / `spsearch` / ... for searches, the host for links.
+            let kind = match identifier.split_once(':') {
+                Some((prefix, rest)) if !rest.starts_with("//") && prefix.len() <= 12 => {
+                    prefix.to_owned()
+                }
+                _ => url::Url::parse(identifier)
+                    .ok()
+                    .and_then(|u| {
+                        u.host_str()
+                            .map(|h| h.trim_start_matches("www.").to_owned())
+                    })
+                    .unwrap_or_else(|| "other".to_owned()),
+            };
+            let (load_type, count) = match &result {
+                Ok(v) => (
+                    v["loadType"].as_str().unwrap_or_default().to_owned(),
+                    match &v["data"] {
+                        Value::Array(items) => items.len(),
+                        Value::Object(map) => map
+                            .get("tracks")
+                            .and_then(Value::as_array)
+                            .map_or(1, Vec::len),
+                        _ => 0,
+                    },
+                ),
+                Err(_) => ("request_failed".to_owned(), 0),
+            };
+            crate::common::diagnostics::record(
+                "lavalink.load",
+                serde_json::json!({ "op": kind, "loadType": load_type, "tracks": count,
+                    "loadMs": crate::common::diagnostics::elapsed_ms(started),
+                    "ok": result.is_ok() && load_type != "error" }),
+            );
+        }
+        result
     }
 
     pub async fn update_player(
@@ -302,6 +361,13 @@ impl Node {
         let session = self
             .session_id()
             .ok_or_else(|| anyhow!("The Lavalink node has no active session."))?;
+        let new_track = body["track"]["encoded"].is_string();
+        if new_track && crate::common::diagnostics::enabled() {
+            self.pending_starts
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .insert(guild_id.to_owned(), std::time::Instant::now());
+        }
         self.rest
             .request(
                 Method::PATCH,
@@ -309,6 +375,61 @@ impl Node {
                 Some(body),
             )
             .await
+    }
+
+    /// `lavalink.event` per player event; TrackStart also gets the time since the track was
+    /// sent (`playToStartMs`: source lookup + first audio from the node).
+    fn record_event(&self, payload: &Value) {
+        use crate::common::diagnostics;
+        if !diagnostics::enabled() {
+            return;
+        }
+        let kind = payload["type"].as_str().unwrap_or_default();
+        let guild = payload["guildId"].as_str().unwrap_or_default();
+        let mut out = serde_json::json!({ "op": kind, "guild": guild });
+        match kind {
+            "TrackStartEvent" => {
+                let sent = self
+                    .pending_starts
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .remove(guild);
+                out["playToStartMs"] = serde_json::json!(sent.map(diagnostics::elapsed_ms));
+                out["source"] = payload["track"]["info"]["sourceName"].clone();
+                out["isStream"] = payload["track"]["info"]["isStream"].clone();
+                diagnostics::record("lavalink.track_start", out.clone());
+                return;
+            }
+            "TrackEndEvent" => out["reason"] = payload["reason"].clone(),
+            "TrackExceptionEvent" => {
+                self.pending_starts
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .remove(guild);
+                out["severity"] = payload["exception"]["severity"].clone();
+                out["error"] = payload["exception"]["message"].clone();
+                out["cause"] = serde_json::json!(payload["exception"]["cause"].as_str().map(|c| {
+                    c.lines()
+                        .next()
+                        .unwrap_or_default()
+                        .chars()
+                        .take(300)
+                        .collect::<String>()
+                }));
+                out["ok"] = serde_json::json!(false);
+            }
+            "TrackStuckEvent" => {
+                out["thresholdMs"] = payload["thresholdMs"].clone();
+                out["ok"] = serde_json::json!(false);
+            }
+            "WebSocketClosedEvent" => {
+                out["code"] = payload["code"].clone();
+                out["reason"] = payload["reason"].clone();
+                out["byRemote"] = payload["byRemote"].clone();
+            }
+            _ => {}
+        }
+        diagnostics::record("lavalink.event", out);
     }
 
     async fn enable_resuming(&self, session: &str) -> Result<()> {
@@ -416,6 +537,37 @@ pub async fn search(
 }
 
 /// `{ track: { encoded } }` body for a PATCH.
+/// `lavalink.stats` (sent by Lavalink every minute). `frameStats` cover the last minute:
+/// `nulled`/`deficit` frames are audio that did not reach Discord in time.
+fn record_stats(payload: &Value) {
+    use crate::common::diagnostics;
+    if !diagnostics::enabled() {
+        return;
+    }
+    let frames = &payload["frameStats"];
+    let lost = frames["nulled"].as_i64().unwrap_or(0) + frames["deficit"].as_i64().unwrap_or(0);
+    diagnostics::record(
+        "lavalink.stats",
+        serde_json::json!({
+            "players": payload["players"],
+            "playingPlayers": payload["playingPlayers"],
+            "memUsedMb": payload["memory"]["used"].as_f64().map(|b| (b / 1_048_576.0).round()),
+            "lavalinkLoad": payload["cpu"]["lavalinkLoad"],
+            "systemLoad": payload["cpu"]["systemLoad"],
+            "framesSent": frames["sent"],
+            "framesNulled": frames["nulled"],
+            "framesDeficit": frames["deficit"],
+        }),
+    );
+    if lost > 0 {
+        diagnostics::record(
+            "lavalink.frames_lost",
+            serde_json::json!({ "nulled": frames["nulled"], "deficit": frames["deficit"],
+                                "sent": frames["sent"] }),
+        );
+    }
+}
+
 pub fn track_body(track: &Value) -> Value {
     json!({ "encoded": track["encoded"] })
 }

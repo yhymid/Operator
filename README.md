@@ -113,6 +113,27 @@ One job runs at a time, for at most 14 minutes. Videos longer than
 refused, and so are links to local and private addresses. YouTube needs cookies: the owner
 uploads them with `/cookies`.
 
+## Diagnostics
+
+`OPERATOR_DIAGNOSTICS=1` in `.env` turns on a recorder that runs next to the bot and never
+slows it down (its own thread, a bounded queue; events are dropped and counted when the disk
+cannot keep up):
+
+- `diagnostics/events-YYYY-MM-DD.txt` - one JSON object per line: every log line and every
+  measured event, with tokens, passwords and webhook URLs removed. Files are readable only by
+  the bot's user.
+- `diagnostics/summary-YYYY-MM-DD.md` - rewritten every 15 minutes and at shutdown: p50 /
+  p90 / p99 of every measured time, failures and status codes, memory and CPU, anomalies,
+  the most frequent warnings, and hints on what causes the delay.
+
+Measured: gateway delay and time to the first answer of every command (Discord allows 3 s),
+every Discord and Lavalink request (time to first byte, status, server clock), rate limits,
+time from the play request to the start of a track, Lavalink voice ping and lost audio
+frames, voice server assignment, the /ytdlp stages (queue, download, conversion, upload
+speed), yt-dlp/ffmpeg run times, heartbeat, how late the runtime wakes timers, memory, CPU
+and child processes. Old days are deleted after `OPERATOR_DIAGNOSTICS_RETENTION_DAYS`
+(14); one day's file stops growing at `OPERATOR_DIAGNOSTICS_MAX_FILE_MB` (256).
+
 ## Development
 
 ```bash

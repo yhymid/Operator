@@ -13,6 +13,11 @@ section below as its description.
   and after a Lavalink restart every session gets its track and position back.
 - The Lyrics button shows the real lyrics (LavaLyrics + LRCLIB) instead of a search link.
 - Two new effects in the FX menu: Normalize and Echo (LavaDSPX).
+- Optional 24/7 diagnostics (`OPERATOR_DIAGNOSTICS=1`): every event and log line, without
+  tokens or passwords, in `diagnostics/events-YYYY-MM-DD.txt`, and a latency report every
+  15 minutes in `diagnostics/summary-YYYY-MM-DD.md` (time to answer a command, Discord and
+  Lavalink requests, time until a track starts, voice ping, lost audio frames, /ytdlp
+  stages, rate limits, memory and CPU).
 
 ### Changed
 - Default volume is 100 %, so Lavalink passes Opus audio through without re-encoding.

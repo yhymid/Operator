@@ -317,6 +317,7 @@ async fn run() -> Result<ExitCode> {
         }
     };
     let startup_verbose = config::is_true(&root_config, &["startupVerboseLogs"]);
+    start_diagnostics();
 
     let token = bot_token()?;
     let http = Arc::new(HttpClient::new(token.clone()));
@@ -364,6 +365,14 @@ async fn run() -> Result<ExitCode> {
                 continue;
             }
         };
+        if matches!(event, Event::GatewayHeartbeatAck)
+            && let Some(rtt) = shard.latency().recent().first()
+        {
+            crate::common::diagnostics::record(
+                "discord.heartbeat",
+                serde_json::json!({ "rttMs": crate::common::diagnostics::ms(*rtt) }),
+            );
+        }
         // Old state for the audit logs must be captured before the cache applies the event.
         let before = fulllogs::capture_before(&app.cache, &event);
         app.cache.update(&event);
@@ -383,7 +392,36 @@ async fn run() -> Result<ExitCode> {
 
     graceful_shutdown(&app, &runners, reason).await;
     shard.close(CloseFrame::NORMAL);
+    crate::common::diagnostics::record(
+        "diagnostics.stopped",
+        serde_json::json!({ "reason": reason }),
+    );
+    crate::common::diagnostics::flush();
     Ok(ExitCode::SUCCESS)
+}
+
+/// `OPERATOR_DIAGNOSTICS=1`: events and latency summaries in `diagnostics/`.
+fn start_diagnostics() {
+    use crate::common::diagnostics;
+    let base = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let Some(options) = diagnostics::Options::from_env(&base) else {
+        return;
+    };
+    let dir = options.dir.display().to_string();
+    match diagnostics::init(options, "operator-discord", diagnostics::secrets_from_env()) {
+        Ok(()) => {
+            tracing::info!("Diagnostics recording to {dir}");
+            diagnostics::spawn_sampler();
+        }
+        Err(error) => tracing::warn!("Diagnostics disabled: {error}"),
+    }
+}
+
+fn event_label(event: &Event) -> String {
+    event
+        .kind()
+        .name()
+        .map_or_else(|| format!("{:?}", event.kind()), str::to_owned)
 }
 
 async fn handle_event(
@@ -395,19 +433,43 @@ async fn handle_event(
     if app.shutting_down.load(Ordering::SeqCst) {
         return;
     }
+    let diagnostics = crate::common::diagnostics::enabled().then(|| {
+        let created = match &event {
+            Event::MessageCreate(m) => Some(m.id.get()),
+            Event::InteractionCreate(i) => Some(i.id.get()),
+            _ => None,
+        };
+        (std::time::Instant::now(), event_label(&event), created)
+    });
+    let fulllogs_started = std::time::Instant::now();
     app.fulllogs.handle_event(&app, &event, before).await;
+    let fulllogs_ms = crate::common::diagnostics::elapsed_ms(fulllogs_started);
+    handle_event_inner(&app, &started, event).await;
+    if let Some((received, op, created)) = diagnostics {
+        let total = crate::common::diagnostics::elapsed_ms(received);
+        let mut payload =
+            serde_json::json!({ "op": op, "totalMs": total, "fullLogsMs": fulllogs_ms });
+        if let Some(id) = created {
+            payload["gatewayDelayMs"] =
+                serde_json::json!(crate::common::diagnostics::snowflake_age_ms(id) - total);
+        }
+        crate::common::diagnostics::record("gateway.event", payload);
+    }
+}
+
+async fn handle_event_inner(app: &SharedApp, started: &AtomicBool, event: Event) {
     match event {
         Event::MessageCreate(message) => {
             if !message.author.bot {
-                app.automod.handle_message(&app, &message).await;
+                app.automod.handle_message(app, &message).await;
             }
         }
         Event::MessageUpdate(message) => {
             if !message.author.bot {
-                app.automod.handle_edit(&app, &message).await;
+                app.automod.handle_edit(app, &message).await;
             }
         }
-        Event::VoiceStateUpdate(update) => app.music.handle_voice_state(&app, &update).await,
+        Event::VoiceStateUpdate(update) => app.music.handle_voice_state(app, &update).await,
         Event::VoiceServerUpdate(update) => app.music.handle_voice_server(&update).await,
         // discord.js only emits guildCreate for guilds joined after clientReady.
         Event::GuildCreate(guild) if started.load(Ordering::SeqCst) => {
@@ -417,7 +479,7 @@ async fn handle_event(
         }
         // `unavailable: true` is an outage (guildUnavailable in discord.js), not a removal.
         Event::GuildDelete(guild) if guild.unavailable != Some(true) => {
-            app.music.stop(&app, guild.id).await;
+            app.music.stop(app, guild.id).await;
             app.state
                 .mark_guild_offline(&guild.id.to_string(), None, "guildDelete");
         }

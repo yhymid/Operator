@@ -54,6 +54,15 @@ impl JsonClient {
         })
     }
 
+    /// `host[:port]` of the base URL, for diagnostics.
+    fn host(&self) -> &str {
+        let rest = self
+            .base
+            .split_once("://")
+            .map_or(self.base.as_str(), |(_, r)| r);
+        rest.split('/').next().unwrap_or(rest)
+    }
+
     #[cfg(test)]
     fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
         self.timeout = timeout;
@@ -62,6 +71,7 @@ impl JsonClient {
 
     /// Sends a request; returns the parsed JSON body (`Value::Null` for empty bodies).
     pub async fn request(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Value> {
+        let method_name = method.as_str().to_owned();
         let mut builder = Request::builder()
             .method(method)
             .uri(format!("{}{path}", self.base))
@@ -75,15 +85,48 @@ impl JsonClient {
             None => Bytes::new(),
         };
         let request = builder.body(Full::new(payload))?;
+        let started = std::time::Instant::now();
+        let timing = std::sync::Mutex::new((None, None, None::<String>));
         let exchange = async {
             let response = self.client.request(request).await?;
             let status = response.status();
+            let date = response
+                .headers()
+                .get(http::header::DATE)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned);
+            let ttfb = started.elapsed();
             let bytes = response.into_body().collect().await?.to_bytes();
+            *timing.lock().unwrap_or_else(|p| p.into_inner()) = (
+                Some(ttfb),
+                Some(started.elapsed().saturating_sub(ttfb)),
+                date,
+            );
             anyhow::Ok((status, bytes))
         };
-        let (status, bytes) = tokio::time::timeout(self.timeout, exchange)
+        let result = tokio::time::timeout(self.timeout, exchange)
             .await
-            .with_context(|| format!("request {path} timed out after {:?}", self.timeout))??;
+            .with_context(|| format!("request {path} timed out after {:?}", self.timeout))
+            .and_then(|inner| inner);
+        if crate::common::diagnostics::enabled() {
+            let (ttfb, body_time, date) = timing.into_inner().unwrap_or_else(|p| p.into_inner());
+            let error = result.as_ref().err().map(|e| format!("{e:#}"));
+            crate::common::diagnostics::HttpTiming {
+                client: "rest",
+                method: &method_name,
+                host: self.host(),
+                path,
+                status: result.as_ref().ok().map(|(s, _)| s.as_u16()),
+                ttfb,
+                body: body_time,
+                total: started.elapsed(),
+                bytes: result.as_ref().ok().map(|(_, b)| b.len()),
+                date: date.as_deref(),
+                error: error.as_deref(),
+            }
+            .record();
+        }
+        let (status, bytes) = result?;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&bytes);
             let message = serde_json::from_slice::<Value>(&bytes)

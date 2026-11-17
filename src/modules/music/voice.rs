@@ -1,6 +1,11 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 
+/// Guild → when the bot asked to join a voice channel (diagnostics: time until Discord
+/// assigns the voice server).
+static VOICE_JOINS: std::sync::Mutex<Option<HashMap<Id<GuildMarker>, std::time::Instant>>> =
+    std::sync::Mutex::new(None);
+
 impl MusicManager {
     // --- voice gateway -------------------------------------------------------------------------
 
@@ -9,6 +14,13 @@ impl MusicManager {
         guild_id: Id<GuildMarker>,
         channel: Option<Id<ChannelMarker>>,
     ) -> Result<()> {
+        if channel.is_some() && crate::common::diagnostics::enabled() {
+            VOICE_JOINS
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .get_or_insert_with(HashMap::new)
+                .insert(guild_id, std::time::Instant::now());
+        }
         app.sender
             .command(&UpdateVoiceState::new(guild_id, channel, true, false))
             .map_err(|e| anyhow!("Could not send the voice state: {e}"))
@@ -154,7 +166,31 @@ impl MusicManager {
         };
         player.voice_token = Some(update.token.clone());
         player.voice_endpoint = update.endpoint.clone();
+        let asked = VOICE_JOINS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_mut()
+            .and_then(|joins| joins.remove(&update.guild_id));
+        let pushed = std::time::Instant::now();
         self.push_voice(player).await;
+        if crate::common::diagnostics::enabled() {
+            // `c-waw01-1234.discord.media:443` -> `c-waw01`: the voice server's region.
+            let region = update.endpoint.as_deref().map(|e| {
+                e.split('.')
+                    .next()
+                    .unwrap_or_default()
+                    .rsplit_once('-')
+                    .map_or(e, |(r, _)| r)
+                    .to_owned()
+            });
+            crate::common::diagnostics::record(
+                "discord.voice",
+                json!({ "op": "voice_server", "guild": update.guild_id.to_string(),
+                    "region": region,
+                    "voiceServerMs": asked.map(crate::common::diagnostics::elapsed_ms),
+                    "pushToLavalinkMs": crate::common::diagnostics::elapsed_ms(pushed) }),
+            );
+        }
     }
     // --- voice channel status ------------------------------------------------------------------
 

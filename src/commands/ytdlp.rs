@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Result, anyhow, bail};
 use tokio::io::AsyncReadExt;
@@ -183,6 +183,7 @@ async fn run(
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
+    let started = Instant::now();
     let mut child = command.spawn().map_err(|e| format!("{program}: {e}"))?;
     let mut out = child.stdout.take();
     let mut err = child.stderr.take();
@@ -210,6 +211,16 @@ async fn run(
     };
     let stdout = read_out.await.unwrap_or_default();
     let stderr = read_err.await.unwrap_or_default();
+    crate::common::diagnostics::record(
+        "process.child",
+        serde_json::json!({
+            "op": Path::new(program).file_name().map_or_else(|| program.to_owned(), |n| n.to_string_lossy().into_owned()),
+            "runMs": crate::common::diagnostics::elapsed_ms(started),
+            "ok": status.is_some_and(|s| s.success()),
+            "timedOut": status.is_none(),
+            "exitCode": status.and_then(|s| s.code()),
+        }),
+    );
     match status {
         Some(s) if s.success() => Ok(stdout),
         None => Err(format!("Time limit exceeded ({program})")),
@@ -422,9 +433,17 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
     tokio::fs::create_dir_all(&temp_dir).await?;
     // Waiting for the slot counts against the same 15-minute token, hence one timeout for both.
     // Dropping the future on timeout kills yt-dlp/ffmpeg (`kill_on_drop`).
+    let mut trace = serde_json::json!({
+        "op": if audio { "audio" } else { "video" },
+        "host": url::Url::parse(&url).ok().and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_owned())),
+        "codec": format!("{:?}", settings.codec),
+    });
+    let job_started = Instant::now();
     let result = tokio::time::timeout(INTERACTION_BUDGET, async {
         let _slot = job_slot().acquire().await?;
-        download_and_send(ix, &settings, &url, &temp_dir, audio).await
+        trace["slotWaitMs"] =
+            serde_json::json!(crate::common::diagnostics::elapsed_ms(job_started));
+        download_and_send(ix, &settings, &url, &temp_dir, audio, &mut trace).await
     })
     .await
     .unwrap_or_else(|_| {
@@ -438,6 +457,14 @@ pub async fn execute(ix: &Ix<'_>) -> Result<()> {
             temp_dir.display()
         );
     }
+    trace["totalMs"] = serde_json::json!(crate::common::diagnostics::elapsed_ms(job_started));
+    trace["sinceCommandMs"] =
+        serde_json::json!(crate::common::diagnostics::elapsed_ms(ix.received));
+    trace["ok"] = serde_json::json!(result.is_ok());
+    if let Err(error) = &result {
+        trace["error"] = serde_json::json!(friendly_error(&format!("{error:#}")));
+    }
+    crate::common::diagnostics::record("ytdlp.job", trace);
     if let Err(error) = result {
         tracing::error!("yt-dlp error: {error:#}");
         // Raw yt-dlp/ffmpeg output stays in the log: it can reveal paths or internal addresses.
@@ -485,6 +512,7 @@ async fn download_and_send(
     url: &str,
     dir: &Path,
     audio: bool,
+    trace: &mut serde_json::Value,
 ) -> Result<()> {
     let mut args: Vec<String> = ["--no-playlist", "--no-progress"]
         .map(str::to_owned)
@@ -518,9 +546,11 @@ async fn download_and_send(
             .into_owned(),
     );
     args.push(url.to_owned());
+    let stage = Instant::now();
     let stdout = run(&settings.ytdlp, &args, Some(dir), DOWNLOAD_TIMEOUT)
         .await
         .map_err(|e| anyhow!(e))?;
+    trace["downloadMs"] = serde_json::json!(crate::common::diagnostics::elapsed_ms(stage));
     let Some(file) = find_downloaded_file(dir).await else {
         // Both limits make yt-dlp skip the video and still exit with success.
         if stdout.contains("does not pass filter") {
@@ -537,21 +567,32 @@ async fn download_and_send(
         }
         bail!("yt-dlp did not return a downloaded file.");
     };
+    trace["downloadedBytes"] =
+        serde_json::json!(tokio::fs::metadata(&file).await.map(|m| m.len()).ok());
+    let stage = Instant::now();
     let file = if audio {
         file
     } else {
         ensure_compatible(settings, &file).await?
     };
+    trace["convertMs"] = serde_json::json!(crate::common::diagnostics::elapsed_ms(stage));
     let size = tokio::fs::metadata(&file).await?.len();
+    trace["outputBytes"] = serde_json::json!(size);
+    let stage = Instant::now();
     if size > settings.max_upload_bytes {
         let link = publish(settings, &file).await?;
+        trace["delivery"] = serde_json::json!("link");
+        trace["publishMs"] = serde_json::json!(crate::common::diagnostics::elapsed_ms(stage));
         return ix.edit_content(too_large_text(size, &link)).await;
     }
     let name = file
         .file_name()
         .map_or("video.mp4".to_owned(), |n| n.to_string_lossy().into_owned());
     let bytes = tokio::fs::read(&file).await?;
-    match ix.edit_with_file("", &name, bytes).await {
+    let upload = ix.edit_with_file("", &name, bytes).await;
+    trace["uploadMs"] = serde_json::json!(crate::common::diagnostics::elapsed_ms(stage));
+    trace["delivery"] = serde_json::json!("attachment");
+    match upload {
         Ok(()) => Ok(()),
         Err(error) => {
             let text = format!("{error:#}");
@@ -561,6 +602,7 @@ async fn download_and_send(
                 || text.contains("40005")
             {
                 let link = publish(settings, &file).await?;
+                trace["delivery"] = serde_json::json!("link_after_413");
                 return ix.edit_content(too_large_text(size, &link)).await;
             }
             bail!(text)
