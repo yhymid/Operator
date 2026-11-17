@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -742,8 +742,41 @@ impl Writer {
         self.capped = false;
         let path = self.options.dir.join(format!("events-{day}.txt"));
         self.written = fs::metadata(&path).map_or(0, |m| m.len());
+        // A restart the same day continues that day's report instead of overwriting it.
+        self.replay(&path);
         self.file = open_private(&path).map(BufWriter::new);
         self.cleanup();
+    }
+
+    /// Feeds an existing events file back into the aggregates (already redacted).
+    fn replay(&mut self, path: &Path) {
+        let Ok(file) = File::open(path) else {
+            return;
+        };
+        for line in BufReader::new(file).lines().map_while(Result::ok) {
+            let Ok(Value::Object(mut map)) = serde_json::from_str::<Value>(&line) else {
+                continue;
+            };
+            let at = map
+                .remove("t")
+                .and_then(|t| {
+                    t.as_str()
+                        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                })
+                .map(|t| t.with_timezone(&Utc));
+            let event = map.remove("e").and_then(|e| e.as_str().map(str::to_owned));
+            if let (Some(at), Some(event)) = (at, event) {
+                if event == "diagnostics.capped" {
+                    self.capped = true;
+                }
+                self.agg.observe(&Record {
+                    at,
+                    event,
+                    payload: Value::Object(map),
+                    flush: None,
+                });
+            }
+        }
     }
 
     fn cleanup(&self) {
@@ -866,8 +899,12 @@ struct ProcessAgg {
     fds_max: f64,
     threads_max: f64,
     load_max: f64,
-    cpu: Option<(DateTime<Utc>, f64, DateTime<Utc>, f64)>,
+    /// CPU and wall time summed over consecutive samples of the same process.
+    cpu_ms: f64,
+    wall_ms: f64,
+    last_cpu: Option<(DateTime<Utc>, f64)>,
     child_names: BTreeMap<String, u64>,
+    restarts: u64,
 }
 
 #[derive(Default)]
@@ -966,6 +1003,12 @@ impl Aggregates {
 
         match record.event.as_str() {
             "process.sample" => self.observe_process(record.at, p),
+            "diagnostics.started" => {
+                // Memory growth and CPU are tracked per process.
+                self.process.restarts += 1;
+                self.process.rss_first = None;
+                self.process.last_cpu = None;
+            }
             "anomaly" => {
                 let entry = self.anomalies.entry(text(p, "kind")).or_default();
                 entry.0 += 1;
@@ -1022,10 +1065,14 @@ impl Aggregates {
         }
         if let (Some(u), Some(s)) = (num(p, "cpuUserMsTotal"), num(p, "cpuSysMsTotal")) {
             let cpu = u + s;
-            proc.cpu = Some(match proc.cpu {
-                Some((t0, c0, _, _)) => (t0, c0, at, cpu),
-                None => (at, cpu, at, cpu),
-            });
+            // Counters restart with the process; only deltas within one process count.
+            if let Some((t0, c0)) = proc.last_cpu
+                && cpu >= c0
+            {
+                proc.cpu_ms += cpu - c0;
+                proc.wall_ms += (at - t0).num_milliseconds().max(0) as f64;
+            }
+            proc.last_cpu = Some((at, cpu));
         }
     }
 
@@ -1151,17 +1198,17 @@ impl Aggregates {
                 proc.threads_max,
                 proc.fds_max
             );
-            if let Some((t0, c0, t1, c1)) = proc.cpu {
-                let wall = (t1 - t0).num_milliseconds() as f64;
-                if wall > 0.0 {
-                    let _ = writeln!(
-                        out,
-                        "- CPU: {:.2}% of one core on average ({:.1} s over {:.1} h)",
-                        (c1 - c0) / wall * 100.0,
-                        (c1 - c0) / 1000.0,
-                        wall / 3_600_000.0
-                    );
-                }
+            if proc.wall_ms > 0.0 {
+                let _ = writeln!(
+                    out,
+                    "- CPU: {:.2}% of one core on average ({:.1} s over {:.1} h)",
+                    proc.cpu_ms / proc.wall_ms * 100.0,
+                    proc.cpu_ms / 1000.0,
+                    proc.wall_ms / 3_600_000.0
+                );
+            }
+            if proc.restarts > 0 {
+                let _ = writeln!(out, "- process starts today: {}", proc.restarts);
             }
             let _ = writeln!(
                 out,
@@ -1493,6 +1540,46 @@ mod tests {
         assert!(hints.contains("Discord rejects answers after 3 s"));
         assert!(hints.contains("runtime was blocked"));
         assert!(hints.contains("1 rate limit hit"));
+    }
+
+    #[test]
+    fn restart_continues_the_days_report() {
+        let dir = std::env::temp_dir().join(format!(
+            "operator-diag-replay-{}-{}",
+            std::process::id(),
+            rand_suffix()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let day = "2026-11-17";
+        let lines = [
+            r#"{"t":"2026-11-17T01:00:00.000Z","e":"diagnostics.started"}"#,
+            r#"{"t":"2026-11-17T01:00:00.000Z","e":"process.sample","cpuUserMsTotal":0,"cpuSysMsTotal":0,"rssKb":1000}"#,
+            r#"{"t":"2026-11-17T01:01:00.000Z","e":"process.sample","cpuUserMsTotal":600,"cpuSysMsTotal":0,"rssKb":1000}"#,
+            r#"{"t":"2026-11-17T01:01:00.000Z","e":"interaction","op":"/play","totalMs":250}"#,
+            "not json",
+            r#"{"t":"2026-11-17T02:00:00.000Z","e":"diagnostics.started"}"#,
+            r#"{"t":"2026-11-17T02:00:00.000Z","e":"process.sample","cpuUserMsTotal":10,"cpuSysMsTotal":0,"rssKb":900}"#,
+        ];
+        fs::write(dir.join(format!("events-{day}.txt")), lines.join("\n")).unwrap();
+        let mut writer = Writer::new(
+            Options {
+                dir: dir.clone(),
+                retention_days: 3650,
+                max_file_bytes: 1024 * 1024,
+                summary_every: Duration::from_secs(3600),
+            },
+            "test".to_owned(),
+            Redactor::new(Vec::new()),
+        );
+        writer.rotate(day);
+        let st = writer.agg.stat("interaction /play", "totalMs").unwrap();
+        assert_eq!(st.n, 1);
+        assert_eq!(writer.agg.process.restarts, 2);
+        // 600 ms CPU over 60 s in the first process; the restart's lower counter is ignored.
+        assert!((writer.agg.process.cpu_ms - 600.0).abs() < f64::EPSILON);
+        assert!((writer.agg.process.wall_ms - 60_000.0).abs() < f64::EPSILON);
+        assert_eq!(writer.agg.process.rss_first, Some(900.0));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// End to end: the real recorder writes redacted events and a summary to disk.
