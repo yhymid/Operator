@@ -42,9 +42,6 @@ OPERATOR_LOG_DIR=/srv/operator/logs
 OPERATOR_SYNC_COMMANDS_ON_STARTUP=0
 ```
 
-Przenosisz bota z wersji JS? Skopiuj stary `.env`, `config.json` oraz katalogi `cache/` i `logs/` -
-format jest ten sam.
-
 ## 3. Sprawdzenie i komendy
 
 ```bash
