@@ -415,6 +415,10 @@ impl Node {
                 out["source"] = payload["track"]["info"]["sourceName"].clone();
                 out["isStream"] = payload["track"]["info"]["isStream"].clone();
                 out["lengthMs"] = payload["track"]["info"]["length"].clone();
+                // Which exact upload played (a playlist may hold a cover or a kids' version).
+                for key in ["title", "author", "identifier", "uri"] {
+                    out[key] = payload["track"]["info"][key].clone();
+                }
                 diagnostics::record("lavalink.track_start", out.clone());
                 let ended = self
                     .track_ends
