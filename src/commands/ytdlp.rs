@@ -48,8 +48,11 @@ struct Settings {
     media_base_url: String,
     cookies: PathBuf,
     codec: VideoCodec,
+    /// Target for sources that cannot be copied (HEVC, VP9, 10-bit) when `codec` is AV1.
+    reencode_codec: VideoCodec,
     crf: Option<u32>,
     av1_preset: u8,
+    x264_preset: &'static str,
     js_runtime: String,
     max_duration_secs: u64,
     max_download_bytes: u64,
@@ -77,6 +80,16 @@ impl Settings {
                 .to_owned(),
             cookies: cookies_path(),
             codec,
+            // HEVC does not play in Discord on PC. x264 veryfast re-encodes it faster than
+            // SVT-AV1 and closer to the source (see `media::x264_preset`), and H.264 plays on
+            // every client; the file is larger. `YTDLP_REENCODE_CODEC=av1` restores AV1.
+            reencode_codec: VideoCodec::parse(
+                env::var("YTDLP_REENCODE_CODEC").as_deref(),
+                VideoCodec::H264,
+            ),
+            x264_preset: crate::common::media::x264_preset(
+                env::var("YTDLP_X264_PRESET").as_deref(),
+            ),
             crf: env::var("YTDLP_VIDEO_CRF")
                 .and_then(|v| v.parse::<u32>().ok())
                 .filter(|v| *v <= 63),
@@ -251,26 +264,37 @@ async fn find_downloaded_file(directory: &Path) -> Option<PathBuf> {
 // Codec compatibility
 // ---------------------------------------------------------------------------------------------
 
-/// Re-encodes HEVC/VP9/10-bit (Discord shows a frozen picture for HEVC) and remuxes for fast start.
-/// AV1 is only there to fit more video into Discord's upload limit. An 8-bit H.264 source that
-/// already fits (with ~10% headroom for the audio conversion) plays everywhere as it is, so it is
-/// remuxed instead of spending minutes of CPU on an AV1 encode.
+/// Picks the delivered codec when AV1 is configured (other settings are used as they are):
+/// - 8-bit AV1 is copied;
+/// - 8-bit H.264 that fits (with ~10% headroom for the audio conversion) is copied, and only a
+///   too-large one is squeezed into AV1;
+/// - everything else (HEVC, which Discord on PC shows as a frozen picture, VP9, 10-bit) goes to
+///   `reencode` (H.264 by default).
 fn effective_codec(
     configured: VideoCodec,
+    reencode: VideoCodec,
     info: &crate::common::media::StreamInfo,
     size: u64,
     max_upload_bytes: u64,
 ) -> VideoCodec {
-    let h264_8bit = info.video.as_deref() == Some("h264")
-        && matches!(info.pix_fmt.as_deref(), Some("yuv420p" | "yuvj420p"));
-    if configured == VideoCodec::Av1 && h264_8bit && size <= max_upload_bytes / 10 * 9 {
-        VideoCodec::H264
-    } else {
-        configured
+    if configured != VideoCodec::Av1 {
+        return configured;
+    }
+    let eight_bit = matches!(info.pix_fmt.as_deref(), Some("yuv420p" | "yuvj420p"));
+    match info.video.as_deref() {
+        Some("av1") if eight_bit => VideoCodec::Av1,
+        Some("h264") if eight_bit && size <= max_upload_bytes / 10 * 9 => VideoCodec::H264,
+        Some("h264") if eight_bit => VideoCodec::Av1,
+        _ => reencode,
     }
 }
 
-async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> {
+/// Fills `trace` (diagnostics) with the source codecs and what was done to them.
+async fn ensure_compatible(
+    settings: &Settings,
+    path: &Path,
+    trace: &mut serde_json::Value,
+) -> Result<PathBuf> {
     if settings.codec == VideoCodec::Source {
         return Ok(path.to_owned());
     }
@@ -308,11 +332,29 @@ async fn ensure_compatible(settings: &Settings, path: &Path) -> Result<PathBuf> 
         .await
         .map_or(u64::MAX, |m| m.len());
     let encode = Encode {
-        codec: effective_codec(settings.codec, &info, size, settings.max_upload_bytes),
+        codec: effective_codec(
+            settings.codec,
+            settings.reencode_codec,
+            &info,
+            size,
+            settings.max_upload_bytes,
+        ),
         crf: settings.crf,
         av1_preset: settings.av1_preset,
+        x264_preset: settings.x264_preset,
     };
     let (args, reencode) = transcode_args(&info, encode, path, &output);
+    trace["sourceVideo"] = serde_json::json!(info.video);
+    trace["sourcePixFmt"] = serde_json::json!(info.pix_fmt);
+    trace["sourceAudio"] = serde_json::json!(info.audio);
+    trace["outputCodec"] = serde_json::json!(format!("{:?}", encode.codec));
+    trace["reencoded"] = serde_json::json!(reencode);
+    if reencode {
+        trace["encoderPreset"] = match encode.codec {
+            VideoCodec::Av1 => serde_json::json!(format!("svt-av1 {}", encode.av1_preset)),
+            _ => serde_json::json!(format!("x264 {}", encode.x264_preset)),
+        };
+    }
     tracing::info!(
         "ytdlp delivery video={:?} pix_fmt={:?} audio={:?} reencode={reencode}",
         info.video,
@@ -573,7 +615,7 @@ async fn download_and_send(
     let file = if audio {
         file
     } else {
-        ensure_compatible(settings, &file).await?
+        ensure_compatible(settings, &file, trace).await?
     };
     trace["convertMs"] = serde_json::json!(crate::common::diagnostics::elapsed_ms(stage));
     let size = tokio::fs::metadata(&file).await?.len();
@@ -677,29 +719,33 @@ mod tests {
     }
 
     #[test]
-    fn small_h264_skips_the_av1_encode() {
+    fn codec_choice_copies_what_plays_and_reencodes_hevc_to_h264() {
         let h264 = parse_probe(
             r#"{"streams":[{"codec_type":"video","codec_name":"h264","pix_fmt":"yuv420p"}]}"#,
         );
         let hevc = parse_probe(
             r#"{"streams":[{"codec_type":"video","codec_name":"hevc","pix_fmt":"yuv420p"}]}"#,
         );
+        let av1 = parse_probe(
+            r#"{"streams":[{"codec_type":"video","codec_name":"av1","pix_fmt":"yuv420p"}]}"#,
+        );
+        let h264_10bit = parse_probe(
+            r#"{"streams":[{"codec_type":"video","codec_name":"h264","pix_fmt":"yuv420p10le"}]}"#,
+        );
         let limit = 25 * 1024 * 1024;
+        let pick = |configured, info, size| {
+            effective_codec(configured, VideoCodec::H264, info, size, limit)
+        };
+        assert_eq!(pick(VideoCodec::Av1, &h264, 10_000_000), VideoCodec::H264);
+        assert_eq!(pick(VideoCodec::Av1, &h264, limit), VideoCodec::Av1);
+        assert_eq!(pick(VideoCodec::Av1, &av1, limit * 2), VideoCodec::Av1);
+        assert_eq!(pick(VideoCodec::Av1, &hevc, 1_000), VideoCodec::H264);
+        assert_eq!(pick(VideoCodec::Av1, &h264_10bit, 1_000), VideoCodec::H264);
+        assert_eq!(pick(VideoCodec::H264, &hevc, 1_000), VideoCodec::H264);
+        assert_eq!(pick(VideoCodec::Source, &hevc, 1_000), VideoCodec::Source);
         assert_eq!(
-            effective_codec(VideoCodec::Av1, &h264, 10_000_000, limit),
-            VideoCodec::H264
-        );
-        assert_eq!(
-            effective_codec(VideoCodec::Av1, &h264, limit, limit),
+            effective_codec(VideoCodec::Av1, VideoCodec::Av1, &hevc, 1_000, limit),
             VideoCodec::Av1
-        );
-        assert_eq!(
-            effective_codec(VideoCodec::Av1, &hevc, 1_000, limit),
-            VideoCodec::Av1
-        );
-        assert_eq!(
-            effective_codec(VideoCodec::H264, &hevc, 1_000, limit),
-            VideoCodec::H264
         );
     }
 

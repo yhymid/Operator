@@ -18,10 +18,18 @@ section below as its description.
   15 minutes in `diagnostics/summary-YYYY-MM-DD.md` (time to answer a command, Discord and
   Lavalink requests, time until a track starts, voice ping, lost audio frames, /ytdlp
   stages, rate limits, memory and CPU).
+- Diagnostics also record the silence between tracks, tell stutter in the middle of a track
+  from the gap while the next track loads, and sample the whole server (CPU, iowait, steal,
+  free memory, swap); `/ytdlp` jobs record the source codec and what was done to it.
 
 ### Changed
 - Default volume is 100 %, so Lavalink passes Opus audio through without re-encoding.
 - Tracks start faster (`bufferDurationMs` 225 in the Lavalink config).
+- `/play` with a big YouTube playlist starts faster: the example Lavalink config loads up to
+  300 tracks (`youtubePlaylistLoadLimit: 3`).
+- `/ytdlp` converts HEVC (a frozen picture in Discord on PC), VP9 and 10-bit video to H.264
+  with x264 `veryfast` instead of AV1: faster, closer to the source and plays on every client,
+  with larger files. `YTDLP_REENCODE_CODEC=av1` restores the old behaviour.
 
 ## 2.0 - Rust Update
 

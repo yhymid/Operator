@@ -108,6 +108,11 @@ pub struct Node {
     wake: tokio::sync::Notify,
     /// Guild id → when a new track was sent to the player (diagnostics: time to TrackStart).
     pending_starts: Mutex<std::collections::HashMap<String, std::time::Instant>>,
+    /// Guild id → when and why the last track ended (diagnostics: silence until the next start).
+    track_ends: Mutex<std::collections::HashMap<String, (std::time::Instant, String)>>,
+    /// Recent track starts/ends on any player (wall clock, last few minutes): a frame-stats
+    /// minute that saw one is a track change.
+    track_changes: Mutex<std::collections::VecDeque<std::time::SystemTime>>,
 }
 
 impl Node {
@@ -127,6 +132,8 @@ impl Node {
             shutdown: AtomicBool::new(false),
             wake: tokio::sync::Notify::new(),
             pending_starts: Mutex::new(std::collections::HashMap::new()),
+            track_ends: Mutex::new(std::collections::HashMap::new()),
+            track_changes: Mutex::new(std::collections::VecDeque::new()),
         })
     }
 
@@ -270,7 +277,7 @@ impl Node {
                     });
                 }
                 "stats" => {
-                    record_stats(&payload);
+                    self.record_stats(&payload);
                     *self.stats.lock().unwrap_or_else(|p| p.into_inner()) = payload;
                 }
                 "playerUpdate" => {
@@ -387,6 +394,16 @@ impl Node {
         let kind = payload["type"].as_str().unwrap_or_default();
         let guild = payload["guildId"].as_str().unwrap_or_default();
         let mut out = serde_json::json!({ "op": kind, "guild": guild });
+        if matches!(kind, "TrackStartEvent" | "TrackEndEvent") {
+            let now = std::time::SystemTime::now();
+            let mut changes = self.track_changes.lock().unwrap_or_else(|p| p.into_inner());
+            changes.push_back(now);
+            while changes.front().is_some_and(|t| {
+                now.duration_since(*t).unwrap_or_default() > std::time::Duration::from_secs(180)
+            }) {
+                changes.pop_front();
+            }
+        }
         match kind {
             "TrackStartEvent" => {
                 let sent = self
@@ -397,10 +414,46 @@ impl Node {
                 out["playToStartMs"] = serde_json::json!(sent.map(diagnostics::elapsed_ms));
                 out["source"] = payload["track"]["info"]["sourceName"].clone();
                 out["isStream"] = payload["track"]["info"]["isStream"].clone();
+                out["lengthMs"] = payload["track"]["info"]["length"].clone();
                 diagnostics::record("lavalink.track_start", out.clone());
+                let ended = self
+                    .track_ends
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .remove(guild);
+                // A start long after the queue ran out is a new session, not a gap.
+                if let Some((at, reason)) =
+                    ended.filter(|(at, _)| at.elapsed() < std::time::Duration::from_secs(120))
+                {
+                    // Silence between two tracks: next track lookup + first audio. Long gaps
+                    // after `loadFailed` mean tracks were skipped on the way.
+                    diagnostics::record(
+                        "lavalink.track_gap",
+                        serde_json::json!({ "op": reason, "guild": guild,
+                                            "gapMs": diagnostics::elapsed_ms(at) }),
+                    );
+                }
                 return;
             }
-            "TrackEndEvent" => out["reason"] = payload["reason"].clone(),
+            "TrackEndEvent" => {
+                out["reason"] = payload["reason"].clone();
+                let reason = payload["reason"].as_str().unwrap_or("unknown");
+                // `replaced` is followed by the new track at once; `stopped`/`cleanup` by nothing.
+                if matches!(reason, "finished" | "loadFailed" | "replaced") {
+                    self.track_ends
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .insert(
+                            guild.to_owned(),
+                            (std::time::Instant::now(), reason.to_owned()),
+                        );
+                } else {
+                    self.track_ends
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .remove(guild);
+                }
+            }
             "TrackExceptionEvent" => {
                 self.pending_starts
                     .lock()
@@ -536,16 +589,48 @@ pub async fn search(
     })
 }
 
-/// `{ track: { encoded } }` body for a PATCH.
-/// `lavalink.stats` (sent by Lavalink every minute). `frameStats` cover the last minute:
-/// `nulled`/`deficit` frames are audio that did not reach Discord in time.
-fn record_stats(payload: &Value) {
-    use crate::common::diagnostics;
-    if !diagnostics::enabled() {
-        return;
+impl Node {
+    /// `lavalink.stats` (sent by Lavalink every minute). `frameStats` cover the last minute
+    /// (Lavalink `AudioLossCounter`): `nulled` = 20 ms frames the player had no audio for,
+    /// `deficit` = 3000 - sent - nulled (positive: the sender fell behind).
+    /// `lavalink.frames_lost` is split by `op`: `track_change` when a track started or ended in
+    /// that minute (silence while the next track loads), `mid_track` otherwise (stutter).
+    fn record_stats(&self, payload: &Value) {
+        use crate::common::diagnostics;
+        if !diagnostics::enabled() {
+            return;
+        }
+        let changes: Vec<u64> = self
+            .track_changes
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .iter()
+            .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .collect();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64);
+        record_stats(payload, changed_in_last_minute(&changes, now));
     }
+}
+
+/// Lavalink reports the previous wall-clock minute; a change up to 5 s around it counts (the
+/// silence of a switch can straddle the minute boundary).
+fn changed_in_last_minute(changes_ms: &[u64], now_ms: u64) -> bool {
+    let end = now_ms / 60_000 * 60_000;
+    let start = end.saturating_sub(60_000);
+    changes_ms
+        .iter()
+        .any(|t| *t + 5_000 >= start && *t < end + 5_000)
+}
+
+fn record_stats(payload: &Value, track_changed: bool) {
+    use crate::common::diagnostics;
     let frames = &payload["frameStats"];
-    let lost = frames["nulled"].as_i64().unwrap_or(0) + frames["deficit"].as_i64().unwrap_or(0);
+    let nulled = frames["nulled"].as_i64().unwrap_or(0);
+    let deficit = frames["deficit"].as_i64().unwrap_or(0);
+    let lost = nulled + deficit;
     diagnostics::record(
         "lavalink.stats",
         serde_json::json!({
@@ -562,12 +647,33 @@ fn record_stats(payload: &Value) {
     if lost > 0 {
         diagnostics::record(
             "lavalink.frames_lost",
-            serde_json::json!({ "nulled": frames["nulled"], "deficit": frames["deficit"],
-                                "sent": frames["sent"] }),
+            serde_json::json!({ "op": if track_changed { "track_change" } else { "mid_track" },
+                                "nulled": frames["nulled"], "deficit": frames["deficit"],
+                                "sent": frames["sent"],
+                                "lostMs": (nulled + deficit.max(0)) * 20 }),
         );
     }
 }
 
+/// `{ track: { encoded } }` body for a PATCH.
 pub fn track_body(track: &Value) -> Value {
     json!({ "encoded": track["encoded"] })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changed_in_last_minute;
+
+    #[test]
+    fn frame_stats_minute_matches_track_changes() {
+        // Stats at 10:13:26 cover 10:12:00-10:13:00.
+        let min = 60_000;
+        let now = 613 * min + 26_000;
+        assert!(changed_in_last_minute(&[612 * min + 30_000], now));
+        assert!(changed_in_last_minute(&[613 * min + 2_000], now)); // straddles the boundary
+        assert!(changed_in_last_minute(&[612 * min - 3_000], now));
+        assert!(!changed_in_last_minute(&[613 * min + 20_000], now)); // after the window
+        assert!(!changed_in_last_minute(&[611 * min], now));
+        assert!(!changed_in_last_minute(&[], now));
+    }
 }

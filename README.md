@@ -100,10 +100,14 @@ YouTube from a server address (checked 2026-11):
 ## /ytdlp
 
 1. yt-dlp downloads the best video and audio.
-2. `ffprobe` checks the file. Anything other than 8-bit AV1 is encoded with SVT-AV1 (Discord
-   shows a frozen picture for HEVC); Opus becomes AAC; matching streams are copied. 8-bit
-   H.264 that already fits the upload limit is only remuxed. `YTDLP_VIDEO_CODEC=h264`
-   switches to H.264 (widest compatibility, about 2.5x larger files).
+2. `ffprobe` checks the file. Opus becomes AAC and matching streams are copied:
+   - 8-bit AV1 is copied; 8-bit H.264 that fits the upload limit is only remuxed, and a larger
+     one is encoded with SVT-AV1 to fit;
+   - HEVC (Discord on PC shows a frozen picture), VP9 and 10-bit video are encoded with x264
+     (`YTDLP_X264_PRESET`, default `veryfast`, CRF 18). On the VPS a 30 s 720p HEVC TikTok took
+     8.9 s against 15.1 s with SVT-AV1 preset 10 and came out closer to the source (SSIM 0.988
+     vs 0.986), as a larger file (14.2 vs 8.9 MiB). `YTDLP_REENCODE_CODEC=av1` goes back to AV1.
+   - `YTDLP_VIDEO_CODEC=h264` makes H.264 the target for everything; `source` skips conversion.
 3. A file up to `YTDLP_MAX_UPLOAD_BYTES` (default 25 MiB) is posted as an attachment. A larger
    one goes to `YTDLP_MEDIA_ROOT` and is linked as a player under `YTDLP_MEDIA_BASE_URL` for
    6 hours.
