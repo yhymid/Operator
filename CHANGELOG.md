@@ -21,18 +21,53 @@ section below as its description.
 - Diagnostics also record the silence between tracks, tell stutter in the middle of a track
   from the gap while the next track loads, and sample the whole server (CPU, iowait, steal,
   free memory, swap); `/ytdlp` jobs record the source codec and what was done to it.
-
 - `/play` with a YouTube playlist link starts the music after ~4 s instead of waiting for the
-  whole list (~8 s for 832 tracks): the first playable of the first 10 entries plays at once
-  and the rest of the playlist is added to the queue in the background. Diagnostics record
-  both times (`music.playlist`).
+  whole list: the first playable of the first 10 entries plays at once and the rest of the
+  playlist is added to the queue in the background. Diagnostics record both times
+  (`music.playlist`). Measured on the VPS with an 832-track playlist (before: the whole list
+  loaded first, music after 8.97 s):
+
+  ```text
+  ┌──────────────────────────────┬──────────┬──────────┐
+  │            Stage             │  Run 1   │  Run 2   │
+  ├──────────────────────────────┼──────────┼──────────┤
+  │ yt-dlp: first 10 entries     │ 3.33 s   │ 3.20 s   │
+  ├──────────────────────────────┼──────────┼──────────┤
+  │ Lavalink: first track        │ 0.36 s   │ 0.19 s   │
+  ├──────────────────────────────┼──────────┼──────────┤
+  │ Command to music             │ 4.09 s   │ 3.89 s   │
+  ├──────────────────────────────┼──────────┼──────────┤
+  │ Whole playlist (background)  │ 9.2 s    │ 8.7 s    │
+  ├──────────────────────────────┼──────────┼──────────┤
+  │ Command to full queue        │ 13.3 s   │ 12.6 s   │
+  ├──────────────────────────────┼──────────┼──────────┤
+  │ Tracks added in background   │ 831      │ 831      │
+  └──────────────────────────────┴──────────┴──────────┘
+  ```
 
 ### Changed
 - Default volume is 100 %, so Lavalink passes Opus audio through without re-encoding.
 - Tracks start faster (`bufferDurationMs` 225 in the Lavalink config).
 - `/ytdlp` converts HEVC (a frozen picture in Discord on PC), VP9 and 10-bit video to H.264
   with x264 `veryfast` instead of AV1: faster, closer to the source and plays on every client,
-  with larger files. `YTDLP_REENCODE_CODEC=av1` restores the old behaviour.
+  with larger files. `YTDLP_REENCODE_CODEC=av1` restores the old behaviour. Measured on the
+  VPS (6 vCPU, no GPU) with a 30 s 720p HEVC TikTok (source 2.7 MiB; SSIM against the source,
+  1 = identical):
+
+  ```text
+  ┌────────────────────────────────────┬─────────┬──────────┬───────┐
+  │              Encoder               │  Time   │   File   │ SSIM  │
+  ├────────────────────────────────────┼─────────┼──────────┼───────┤
+  │ x264 veryfast, CRF 18 (new)        │ 8.9 s   │ 14.2 MiB │ 0.988 │
+  ├────────────────────────────────────┼─────────┼──────────┼───────┤
+  │ SVT-AV1 preset 10, CRF 30 (before) │ 15.1 s  │ 8.9 MiB  │ 0.986 │
+  ├────────────────────────────────────┼─────────┼──────────┼───────┤
+  │ x264 slow, CRF 18                  │ 31.9 s  │ 15.0 MiB │ 0.992 │
+  └────────────────────────────────────┴─────────┴──────────┴───────┘
+  ```
+
+  TikTok offers H.264 only up to 540p (720p and up are HEVC only), so the source has to be
+  converted to keep its resolution.
 
 ## 2.0 - Rust Update
 
