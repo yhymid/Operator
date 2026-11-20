@@ -63,6 +63,33 @@ pub struct Encode {
     /// `None` = codec default (x264: 18, SVT-AV1: 30).
     pub crf: Option<u32>,
     pub av1_preset: u8,
+    /// x264 `-preset` (see [`x264_preset`]).
+    pub x264_preset: &'static str,
+}
+
+/// x264 presets ffmpeg accepts, fastest first.
+const X264_PRESETS: [&str; 9] = [
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+];
+
+/// `YTDLP_X264_PRESET`, default `veryfast`. On the VPS (6 vCPU, 720p HEVC TikTok, CRF 18)
+/// veryfast took 8.9 s against 31.9 s for slow, with SSIM 0.988 vs 0.992 to the source and a
+/// file within 6%; it was also faster and closer to the source than SVT-AV1 preset 10 CRF 30
+/// (15.1 s, SSIM 0.986). Unknown values fall back to the default.
+pub fn x264_preset(raw: Option<&str>) -> &'static str {
+    let wanted = raw.map(|v| v.trim().to_ascii_lowercase());
+    X264_PRESETS
+        .into_iter()
+        .find(|p| wanted.as_deref() == Some(*p))
+        .unwrap_or("veryfast")
 }
 
 /// ffmpeg arguments that turn `input` into an inline-playable MP4. Streams that already match
@@ -105,7 +132,14 @@ pub fn transcode_args(
         let crf = encode.crf.unwrap_or(18).to_string();
         push(
             &mut args,
-            &["-c:v", "libx264", "-preset", "slow", "-crf", &crf],
+            &[
+                "-c:v",
+                "libx264",
+                "-preset",
+                encode.x264_preset,
+                "-crf",
+                &crf,
+            ],
         );
         push(&mut args, &["-profile:v", "high", "-pix_fmt", "yuv420p"]);
     }
@@ -131,6 +165,7 @@ mod tests {
             codec,
             crf,
             av1_preset,
+            x264_preset: "slow",
         }
     }
 
@@ -175,5 +210,22 @@ mod tests {
         let (args, _) = transcode_args(&hevc, enc(VideoCodec::Av1, Some(28), 6), p, o);
         assert!(args.join(" ").contains("-c:v libsvtav1 -preset 6 -crf 28"));
         assert!(!transcode_args(&hevc, enc(VideoCodec::Source, None, 6), p, o).1);
+
+        let fast = Encode {
+            x264_preset: x264_preset(None),
+            ..enc(VideoCodec::H264, None, 10)
+        };
+        let (args, _) = transcode_args(&hevc, fast, p, o);
+        assert!(
+            args.join(" ")
+                .contains("-c:v libx264 -preset veryfast -crf 18")
+        );
+    }
+
+    #[test]
+    fn x264_preset_accepts_only_known_names() {
+        assert_eq!(x264_preset(None), "veryfast");
+        assert_eq!(x264_preset(Some(" Slow ")), "slow");
+        assert_eq!(x264_preset(Some("placebo; rm -rf")), "veryfast");
     }
 }

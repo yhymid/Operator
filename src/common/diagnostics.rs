@@ -18,9 +18,9 @@ use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
@@ -468,6 +468,7 @@ fn sample_process() {
     {
         payload.insert("load1".into(), json!(first.parse::<f64>().unwrap_or(0.0)));
     }
+    host_sample(&mut payload);
     if let Some(recorder) = RECORDER.get() {
         payload.insert(
             "droppedEvents".into(),
@@ -496,6 +497,77 @@ fn proc_stat(pid: u32) -> Option<(String, Vec<String>)> {
     let name = text.get(open + 1..close)?.to_owned();
     let rest = text.get(close + 2..)?;
     Some((name, rest.split_whitespace().map(str::to_owned).collect()))
+}
+
+/// `/proc/stat` "cpu" counters of the previous sample.
+static HOST_CPU: Mutex<Option<[u64; 8]>> = Mutex::new(None);
+
+/// Whole-server CPU (all services, not just this bot) since the previous sample, plus memory:
+/// `hostCpuPct` (busy incl. steal), `hostIowaitPct`, `hostStealPct` (time the VPS host gave to
+/// other guests), `memAvailableMb`, `swapUsedMb`.
+fn host_sample(payload: &mut Map<String, Value>) {
+    if let Some(now) = fs::read_to_string("/proc/stat")
+        .ok()
+        .and_then(|t| host_cpu_counters(&t))
+    {
+        let mut prev = HOST_CPU.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some((busy, iowait, steal)) = prev.and_then(|p| host_cpu_pct(&p, &now)) {
+            let round = |v: f64| (v * 10.0).round() / 10.0;
+            payload.insert("hostCpuPct".into(), json!(round(busy)));
+            payload.insert("hostIowaitPct".into(), json!(round(iowait)));
+            payload.insert("hostStealPct".into(), json!(round(steal)));
+        }
+        *prev = Some(now);
+    }
+    if let Ok(text) = fs::read_to_string("/proc/meminfo") {
+        if let Some(avail) = meminfo_mb(&text, "MemAvailable") {
+            payload.insert("memAvailableMb".into(), json!(avail.round()));
+        }
+        if let (Some(total), Some(free)) = (
+            meminfo_mb(&text, "SwapTotal"),
+            meminfo_mb(&text, "SwapFree"),
+        ) {
+            payload.insert("swapUsedMb".into(), json!((total - free).max(0.0).round()));
+        }
+    }
+}
+
+/// user nice system idle iowait irq softirq steal from the aggregate `cpu` line.
+fn host_cpu_counters(stat: &str) -> Option<[u64; 8]> {
+    let mut fields = stat.lines().next()?.split_whitespace();
+    if fields.next()? != "cpu" {
+        return None;
+    }
+    let mut out = [0u64; 8];
+    for slot in &mut out {
+        *slot = fields.next()?.parse().ok()?;
+    }
+    Some(out)
+}
+
+/// (busy, iowait, steal) as percent of all CPU time between two counter sets.
+fn host_cpu_pct(prev: &[u64; 8], now: &[u64; 8]) -> Option<(f64, f64, f64)> {
+    let d: Vec<f64> = now
+        .iter()
+        .zip(prev)
+        .map(|(a, b)| a.saturating_sub(*b) as f64)
+        .collect();
+    let total: f64 = d.iter().sum();
+    if total <= 0.0 {
+        return None;
+    }
+    let idle = d[3] + d[4];
+    Some((
+        (total - idle) / total * 100.0,
+        d[4] / total * 100.0,
+        d[7] / total * 100.0,
+    ))
+}
+
+fn meminfo_mb(text: &str, key: &str) -> Option<f64> {
+    let line = text.lines().find(|l| l.split(':').next() == Some(key))?;
+    let kb = line.split_whitespace().nth(1)?.parse::<f64>().ok()?;
+    Some(kb / 1024.0)
 }
 
 fn proc_cpu_ms(pid: u32) -> Option<(u64, u64)> {
@@ -899,6 +971,13 @@ struct ProcessAgg {
     fds_max: f64,
     threads_max: f64,
     load_max: f64,
+    host_cpu_sum: f64,
+    host_cpu_n: f64,
+    host_cpu_max: f64,
+    iowait_max: f64,
+    steal_max: f64,
+    mem_available_min: Option<f64>,
+    swap_used_max: f64,
     /// CPU and wall time summed over consecutive samples of the same process.
     cpu_ms: f64,
     wall_ms: f64,
@@ -1058,6 +1137,17 @@ impl Aggregates {
         proc.fds_max = proc.fds_max.max(num(p, "fds").unwrap_or(0.0));
         proc.threads_max = proc.threads_max.max(num(p, "threads").unwrap_or(0.0));
         proc.load_max = proc.load_max.max(num(p, "load1").unwrap_or(0.0));
+        if let Some(cpu) = num(p, "hostCpuPct") {
+            proc.host_cpu_sum += cpu;
+            proc.host_cpu_n += 1.0;
+            proc.host_cpu_max = proc.host_cpu_max.max(cpu);
+        }
+        proc.iowait_max = proc.iowait_max.max(num(p, "hostIowaitPct").unwrap_or(0.0));
+        proc.steal_max = proc.steal_max.max(num(p, "hostStealPct").unwrap_or(0.0));
+        if let Some(mb) = num(p, "memAvailableMb") {
+            proc.mem_available_min = Some(proc.mem_available_min.map_or(mb, |m: f64| m.min(mb)));
+        }
+        proc.swap_used_max = proc.swap_used_max.max(num(p, "swapUsedMb").unwrap_or(0.0));
         if let Some(Value::Array(names)) = p.get("childNames") {
             for name in names.iter().filter_map(Value::as_str) {
                 *proc.child_names.entry(name.to_owned()).or_default() += 1;
@@ -1226,6 +1316,23 @@ impl Aggregates {
                 }
             );
             let _ = writeln!(out, "- host load (1 min): max {:.2}", proc.load_max);
+            if proc.host_cpu_n > 0.0 {
+                let _ = writeln!(
+                    out,
+                    "- host CPU (all services): avg {:.0}%, max {:.0}%; iowait max {:.1}%; steal max {:.1}%",
+                    proc.host_cpu_sum / proc.host_cpu_n,
+                    proc.host_cpu_max,
+                    proc.iowait_max,
+                    proc.steal_max
+                );
+            }
+            if let Some(mb) = proc.mem_available_min {
+                let _ = writeln!(
+                    out,
+                    "- host memory: available min {mb:.0} MB; swap used max {:.0} MB",
+                    proc.swap_used_max
+                );
+            }
         }
 
         if !self.anomalies.is_empty() {
@@ -1317,14 +1424,70 @@ impl Aggregates {
                 fmt_ms(st.p90)
             ));
         }
-        let deficit = self
+        // Frame loss is split by when it happened (lavalink.rs); older records have no `op`.
+        let lost = |op: &str| self.stat(&format!("lavalink.frames_lost {op}"), "lostMs");
+        let all_lost = self
             .events
             .get("lavalink.frames_lost")
             .copied()
             .unwrap_or(0);
-        if deficit > 0 {
+        let mid = lost("mid_track");
+        let change = lost("track_change");
+        if let Some(st) = &mid {
             hints.push(format!(
-                "Lavalink reported missing audio frames in {deficit} minute(s): stutter from CPU or network on the node"
+                "audio stuttered in the middle of tracks in {} minute(s) ({} of audio missing, worst minute {}): CPU, network or the source on the Lavalink node",
+                st.n,
+                fmt_ms(st.sum),
+                fmt_ms(st.max)
+            ));
+        }
+        if let Some(st) = &change {
+            hints.push(format!(
+                "silence around track changes in {} minute(s) ({} in total, worst {}): time to load the next track",
+                st.n,
+                fmt_ms(st.sum),
+                fmt_ms(st.max)
+            ));
+        }
+        let classified = mid.as_ref().map_or(0, |s| s.n) + change.as_ref().map_or(0, |s| s.n);
+        let unclassified = (all_lost as usize).saturating_sub(classified);
+        if unclassified > 0 {
+            hints.push(format!(
+                "Lavalink reported missing audio frames in {unclassified} minute(s) recorded before frame loss was split into mid-track and track changes"
+            ));
+        }
+        if let Some(st) = self.stat_prefix("lavalink.track_gap", "gapMs")
+            && st.p90 > 2_000.0
+        {
+            hints.push(format!(
+                "silence between tracks is {} at p90 (max {}): the next track is slow to load from the source",
+                fmt_ms(st.p90),
+                fmt_ms(st.max)
+            ));
+        }
+        let proc = &self.process;
+        if proc.steal_max >= 10.0 {
+            hints.push(format!(
+                "the VPS host took up to {:.0}% of CPU time (steal): the provider's machine is overloaded",
+                proc.steal_max
+            ));
+        }
+        if proc.host_cpu_n > 0.0 && proc.host_cpu_sum / proc.host_cpu_n >= 80.0 {
+            hints.push(format!(
+                "the server CPU was {:.0}% busy on average (all services): encodes and audio slow down",
+                proc.host_cpu_sum / proc.host_cpu_n
+            ));
+        }
+        if proc.iowait_max >= 20.0 {
+            hints.push(format!(
+                "the server waited on disk up to {:.0}% of CPU time (iowait)",
+                proc.iowait_max
+            ));
+        }
+        if proc.mem_available_min.is_some_and(|mb| mb < 300.0) {
+            hints.push(format!(
+                "server memory ran low: {:.0} MB available at the lowest",
+                proc.mem_available_min.unwrap_or_default()
             ));
         }
         if let Some(st) = self.stat_prefix("telegram.update", "ageMs")
@@ -1540,6 +1703,52 @@ mod tests {
         assert!(hints.contains("Discord rejects answers after 3 s"));
         assert!(hints.contains("runtime was blocked"));
         assert!(hints.contains("1 rate limit hit"));
+    }
+
+    #[test]
+    fn frame_loss_hints_tell_stutter_from_track_changes() {
+        let mut agg = Aggregates::default();
+        agg.observe(&rec("lavalink.frames_lost", json!({ "nulled": 9 })));
+        agg.observe(&rec(
+            "lavalink.frames_lost",
+            json!({ "op": "track_change", "nulled": 50, "lostMs": 1000 }),
+        ));
+        agg.observe(&rec(
+            "lavalink.frames_lost",
+            json!({ "op": "mid_track", "nulled": 5, "lostMs": 100 }),
+        ));
+        agg.observe(&rec(
+            "lavalink.track_gap",
+            json!({ "op": "finished", "gapMs": 2500.0 }),
+        ));
+        agg.observe(&rec(
+            "process.sample",
+            json!({ "hostCpuPct": 90.0, "hostStealPct": 12.0, "hostIowaitPct": 1.0,
+                    "memAvailableMb": 250.0, "swapUsedMb": 10.0 }),
+        ));
+        let hints = agg.hints(0).join("\n");
+        assert!(hints.contains("stuttered in the middle of tracks in 1 minute(s)"));
+        assert!(hints.contains("silence around track changes in 1 minute(s)"));
+        assert!(hints.contains("1 minute(s) recorded before frame loss was split"));
+        assert!(hints.contains("silence between tracks is 2.50 s"));
+        assert!(hints.contains("steal"));
+        assert!(hints.contains("90% busy"));
+        assert!(hints.contains("250 MB available"));
+    }
+
+    #[test]
+    fn host_cpu_percentages() {
+        let prev = host_cpu_counters("cpu  100 0 100 700 50 0 0 50\ncpu0 1 2 3").unwrap();
+        let now = host_cpu_counters("cpu  200 0 200 1300 100 0 0 200\n").unwrap();
+        let (busy, iowait, steal) = host_cpu_pct(&prev, &now).unwrap();
+        // deltas: user 100, system 100, idle 600, iowait 50, steal 150 → total 1000
+        assert!((busy - 35.0).abs() < 1e-9);
+        assert!((iowait - 5.0).abs() < 1e-9);
+        assert!((steal - 15.0).abs() < 1e-9);
+        assert!(host_cpu_counters("intr 1 2").is_none());
+        let mem = "MemTotal: 2048 kB\nMemAvailable:    1024 kB\nSwapTotal: 0 kB\n";
+        assert_eq!(meminfo_mb(mem, "MemAvailable"), Some(1.0));
+        assert_eq!(meminfo_mb(mem, "Mem"), None);
     }
 
     #[test]

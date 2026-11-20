@@ -396,6 +396,9 @@ pub(super) fn encode(codec: VideoCodec, crf: Option<u32>) -> Encode {
         codec,
         crf,
         av1_preset: AV1_PRESET,
+        x264_preset: crate::common::media::x264_preset(
+            std::env::var("YTDLP_X264_PRESET").ok().as_deref(),
+        ),
     }
 }
 

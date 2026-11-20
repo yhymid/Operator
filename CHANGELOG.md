@@ -11,6 +11,11 @@ section below as its description.
   15 minutes in `diagnostics/summary-YYYY-MM-DD.md` (message delay, Bot API calls, waiting
   in the per-chat limiter, rate limits, download / conversion / upload times, memory and
   CPU).
+- Diagnostics also sample the whole server: CPU, iowait, steal, free memory and swap.
+
+### Changed
+- `/ytdlp` encodes H.264 with x264 `veryfast` instead of `slow` (about 3.5x faster at nearly
+  the same quality); `YTDLP_X264_PRESET` sets it.
 
 ## 2.0 - Rust Update
 

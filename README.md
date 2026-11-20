@@ -89,6 +89,9 @@ unit and rolls back when it does not come up. The unit of a Local Bot API Server
 | `source` | HEVC stutters | depends | unchanged | no conversion |
 
 `YTDLP_VIDEO_CRF` changes the conversion quality (lower = better and larger).
+`YTDLP_X264_PRESET` (default `veryfast`) sets the x264 speed: on the VPS a 30 s 720p HEVC clip
+took 8.9 s with `veryfast` against 31.9 s with `slow`, at nearly the same quality (SSIM 0.988
+vs 0.992 to the source).
 
 ## Diagnostics
 
