@@ -15,7 +15,18 @@ section below as its description.
 
 ### Changed
 - `/ytdlp` encodes H.264 with x264 `veryfast` instead of `slow` (about 3.5x faster at nearly
-  the same quality); `YTDLP_X264_PRESET` sets it.
+  the same quality); `YTDLP_X264_PRESET` sets it. Measured on the VPS (6 vCPU) with a 30 s
+  720p HEVC clip (source 2.7 MiB; SSIM against the source, 1 = identical):
+
+  ```text
+  ┌─────────────────────────────┬─────────┬──────────┬───────┐
+  │           Encoder           │  Time   │   File   │ SSIM  │
+  ├─────────────────────────────┼─────────┼──────────┼───────┤
+  │ x264 veryfast, CRF 18 (new) │ 8.9 s   │ 14.2 MiB │ 0.988 │
+  ├─────────────────────────────┼─────────┼──────────┼───────┤
+  │ x264 slow, CRF 18 (before)  │ 31.9 s  │ 15.0 MiB │ 0.992 │
+  └─────────────────────────────┴─────────┴──────────┴───────┘
+  ```
 
 ## 2.0 - Rust Update
 
