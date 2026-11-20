@@ -22,6 +22,11 @@ section below as its description.
   from the gap while the next track loads, and sample the whole server (CPU, iowait, steal,
   free memory, swap); `/ytdlp` jobs record the source codec and what was done to it.
 
+- `/play` with a YouTube playlist link starts the music after ~4 s instead of waiting for the
+  whole list (~8 s for 832 tracks): the first playable of the first 10 entries plays at once
+  and the rest of the playlist is added to the queue in the background. Diagnostics record
+  both times (`music.playlist`).
+
 ### Changed
 - Default volume is 100 %, so Lavalink passes Opus audio through without re-encoding.
 - Tracks start faster (`bufferDurationMs` 225 in the Lavalink config).

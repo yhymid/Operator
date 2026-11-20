@@ -423,6 +423,141 @@ fn play_error_text(message: &str, requested: &str) -> String {
     format!("Playback error: {message}")
 }
 
+/// Big YouTube playlists take Lavalink ~1 s per 100 tracks to load. Instead of waiting, play
+/// the first track that loads from the playlist's first 10 entries (yt-dlp, ~3 s), then load
+/// the whole playlist in the background and append everything after that track. `None` (the
+/// normal path) when yt-dlp or every one of the 10 tracks fails.
+async fn fast_playlist_start(
+    ix: &Ix<'_>,
+    session: &mut crate::modules::music::Session,
+    query: &str,
+) -> Result<Option<String>> {
+    use crate::common::diagnostics;
+    let app = ix.app;
+    let guild_id = session.guild_id;
+    let started = std::time::Instant::now();
+    let (title, ids) = match super::ytdlp::playlist_head(query, 10).await {
+        Ok(head) if !head.1.is_empty() => head,
+        Ok(_) | Err(_) => {
+            tracing::warn!(
+                "Music fast playlist start unavailable guild={guild_id}; loading it whole"
+            );
+            diagnostics::record(
+                "music.playlist",
+                json!({ "op": "fast_start", "ok": false,
+                        "idsMs": diagnostics::elapsed_ms(started) }),
+            );
+            return Ok(None);
+        }
+    };
+    let ids_ms = diagnostics::elapsed_ms(started);
+    let mut first = None;
+    for (index, id) in ids.iter().enumerate() {
+        match app
+            .music
+            .resolve_tracks(&format!("https://www.youtube.com/watch?v={id}"))
+            .await
+        {
+            Ok(resolved) => {
+                if let Some(track) = resolved.tracks.into_iter().next() {
+                    first = Some((index, track));
+                    break;
+                }
+            }
+            Err(error) => tracing::warn!("Music fast playlist skips id={id}: {error}"),
+        }
+    }
+    let Some((skipped, track)) = first else {
+        return Ok(None);
+    };
+    let started_id = track.raw["info"]["identifier"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let batch = app
+        .music
+        .enqueue_many(session, std::slice::from_ref(&track))
+        .await?;
+    session.created_player = false;
+    diagnostics::record(
+        "music.playlist",
+        json!({ "op": "fast_start", "ok": true, "idsMs": ids_ms,
+                "firstTrackMs": diagnostics::elapsed_ms(started),
+                "sinceCommandMs": diagnostics::elapsed_ms(ix.received), "skipped": skipped }),
+    );
+    let title = title.unwrap_or_else(|| "Playlist".to_owned());
+    let now = if batch.started {
+        format!("Now playing: {}.", format_track_line(&track, None))
+    } else {
+        format!("Queued: {}.", format_track_line(&track, None))
+    };
+    tracing::info!(
+        "Music fast playlist start guild={guild_id} title=\"{title}\" first=\"{}\" skipped={skipped}",
+        track.title
+    );
+
+    let app = std::sync::Arc::clone(app);
+    let token = ix.interaction.token.clone();
+    let session = session.clone();
+    let query = query.to_owned();
+    let received = ix.received;
+    let (title_bg, now_bg) = (title.clone(), now.clone());
+    tokio::spawn(async move {
+        let load = std::time::Instant::now();
+        let (text, payload) = match app.music.resolve_tracks(&query).await {
+            Ok(resolved) => {
+                let total = resolved.tracks.len();
+                let title = resolved.playlist_title.unwrap_or(title_bg);
+                match app
+                    .music
+                    .append_playlist_rest(&session, &resolved.tracks, &started_id)
+                    .await
+                {
+                    Some(added) => (
+                        Some(format!(
+                            "Added playlist \"{title}\" ({} tracks). {now_bg}",
+                            added + 1
+                        )),
+                        json!({ "op": "rest", "ok": true, "tracks": total, "added": added }),
+                    ),
+                    None => (
+                        None,
+                        json!({ "op": "rest", "ok": true, "tracks": total, "discarded": true }),
+                    ),
+                }
+            }
+            Err(error) => {
+                tracing::warn!("Music playlist rest failed guild={guild_id}: {error}");
+                (
+                    Some(format!(
+                        "Playlist \"{title_bg}\": {now_bg} The rest of the playlist could not be loaded: {}",
+                        discord::err_text(&error)
+                    )),
+                    json!({ "op": "rest", "ok": false, "error": discord::err_text(&error) }),
+                )
+            }
+        };
+        let mut payload = payload;
+        payload["loadMs"] = json!(diagnostics::elapsed_ms(load));
+        payload["sinceCommandMs"] = json!(diagnostics::elapsed_ms(received));
+        diagnostics::record("music.playlist", payload);
+        let Some(text) = text else {
+            return;
+        };
+        let Ok(body) = serde_json::to_vec(&discord::no_pings(json!({ "content": text }))) else {
+            return;
+        };
+        let client = app.http.interaction(app.application_id);
+        let request = client.update_response(&token).payload_json(&body);
+        if let Err(error) = discord::timed("interaction.edit", "edit", request).await {
+            tracing::warn!("Music playlist reply update failed guild={guild_id}: {error}");
+        }
+    });
+    Ok(Some(format!(
+        "Playlist \"{title}\": {now} Loading the rest of the playlist..."
+    )))
+}
+
 async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
     let app = ix.app;
     let Some(voice) = member_voice_channel(ix) else {
@@ -476,6 +611,11 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
                         .await?;
                 }
                 stage = "resolve";
+                if crate::modules::music::youtube_playlist_only(&query)
+                    && let Some(text) = fast_playlist_start(ix, session, &query).await?
+                {
+                    return Ok(text);
+                }
                 let resolved = app.music.resolve_tracks(&query).await?;
                 tracing::info!(
                     "Music command play resolved guild={guild_id} user={user} type={} count={} firstUrl=\"{}\" firstTitle=\"{}\"",

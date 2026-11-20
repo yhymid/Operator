@@ -94,6 +94,24 @@ pub fn is_http_url(input: &str) -> bool {
     url::Url::parse(input.trim()).is_ok_and(|u| u.scheme() == "http" || u.scheme() == "https")
 }
 
+/// A YouTube link to a whole playlist (`/playlist?list=..`), the case `/play` starts early.
+/// Mixes (`RD..`) are generated per viewer and links with a video (`watch?v=..&list=..`) keep
+/// the normal path.
+pub fn youtube_playlist_only(input: &str) -> bool {
+    if !is_http_url(input) {
+        return false;
+    }
+    let Ok(parsed) = url::Url::parse(input.trim()) else {
+        return false;
+    };
+    let host = parsed.host_str().unwrap_or_default().to_lowercase();
+    (host == "youtube.com" || host.ends_with(".youtube.com"))
+        && parsed.path() == "/playlist"
+        && parsed
+            .query_pairs()
+            .any(|(k, v)| k == "list" && !v.is_empty() && !v.starts_with("RD"))
+}
+
 pub fn extract_youtube_video_id(input: &str) -> Option<String> {
     if !is_http_url(input) {
         return None;
@@ -481,6 +499,21 @@ fn snapshot_of(player: &Player) -> Option<Snapshot> {
     })
 }
 
+/// Tracks after `started` (by YouTube identifier); without it in the list, all but duplicates.
+fn playlist_rest<'a>(tracks: &'a [PublicTrack], started: &str) -> Vec<&'a PublicTrack> {
+    let id = |t: &PublicTrack| {
+        t.raw["info"]["identifier"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    };
+    match tracks.iter().position(|t| id(t) == started) {
+        Some(index) => tracks[index + 1..].iter().collect(),
+        None => tracks.iter().filter(|t| id(t) != started).collect(),
+    }
+}
+
+#[derive(Clone)]
 pub struct Session {
     pub guild_id: Id<GuildMarker>,
     pub instance: u64,
@@ -832,6 +865,27 @@ impl MusicManager {
         })
     }
 
+    /// Adds the rest of a playlist whose track `started` already plays: every track after it
+    /// (tracks before it failed to load on their own). `None` when the session is gone or was
+    /// replaced (`/stop`, a new player) meanwhile, so nothing lands in someone else's queue.
+    pub async fn append_playlist_rest(
+        &self,
+        session: &Session,
+        tracks: &[PublicTrack],
+        started: &str,
+    ) -> Option<usize> {
+        let mut players = self.players.lock().await;
+        let player = players
+            .get_mut(&session.guild_id)
+            .filter(|p| p.instance == session.instance && !p.destroying)?;
+        let rest = playlist_rest(tracks, started);
+        let added = rest.len();
+        player
+            .tracks
+            .extend(rest.into_iter().map(|t| t.raw.clone()));
+        Some(added)
+    }
+
     pub async fn snapshot(&self, guild_id: Id<GuildMarker>) -> Option<Snapshot> {
         self.players
             .lock()
@@ -930,6 +984,42 @@ async fn event_loop(app: Weak<App>, mut events: mpsc::UnboundedReceiver<NodeEven
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn playlist_links_and_rest() {
+        use super::{PublicTrack, playlist_rest, youtube_playlist_only};
+        assert!(youtube_playlist_only(
+            "https://youtube.com/playlist?list=PLIL1tqeaSN4SEH_aSsO0FaYIZ3lrtDUm0&si=x"
+        ));
+        assert!(youtube_playlist_only(
+            "https://www.youtube.com/playlist?list=PLx"
+        ));
+        assert!(youtube_playlist_only(
+            "https://music.youtube.com/playlist?list=OLx"
+        ));
+        assert!(!youtube_playlist_only(
+            "https://www.youtube.com/playlist?list=RDabc"
+        ));
+        assert!(!youtube_playlist_only(
+            "https://www.youtube.com/watch?v=a&list=PLx"
+        ));
+        assert!(!youtube_playlist_only(
+            "https://notyoutube.com/playlist?list=PLx"
+        ));
+        assert!(!youtube_playlist_only("lofi playlist"));
+
+        let track = |id: &str| PublicTrack {
+            title: id.to_owned(),
+            duration_sec: 1,
+            url: String::new(),
+            raw: serde_json::json!({ "info": { "identifier": id } }),
+        };
+        let list = [track("a"), track("b"), track("c"), track("d")];
+        let ids = |v: Vec<&PublicTrack>| v.iter().map(|t| t.title.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(playlist_rest(&list, "a")), ["b", "c", "d"]);
+        assert_eq!(ids(playlist_rest(&list, "c")), ["d"]);
+        assert_eq!(ids(playlist_rest(&list, "x")), ["a", "b", "c", "d"]);
+    }
+
     use super::*;
 
     /// Verified against Lavalink 4.2.2 + LavaDSPX 0.0.5: this body is accepted and echoed

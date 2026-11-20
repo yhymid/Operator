@@ -180,6 +180,46 @@ fn last_line(text: &str) -> Option<String> {
 }
 
 /// Runs a process with a timeout; `Err` carries the last stderr line (or the spawn error).
+/// First `count` entries of a YouTube playlist without loading the whole list (`/play` starts
+/// big playlists from these; ~3 s for 10 on the VPS against ~8 s for 832 tracks in Lavalink).
+/// Returns the playlist title and video ids. No cookies: the playlist must be public.
+pub(crate) async fn playlist_head(
+    url: &str,
+    count: usize,
+) -> Result<(Option<String>, Vec<String>), String> {
+    let program = env::var("YTDLP_PATH").unwrap_or_else(|| "/usr/local/bin/yt-dlp".to_owned());
+    let args: Vec<String> = [
+        "--flat-playlist",
+        "--no-warnings",
+        "-I",
+        &format!("1:{count}"),
+        "--print",
+        "%(playlist_title)s\t%(id)s",
+        "--",
+        url,
+    ]
+    .map(str::to_owned)
+    .into();
+    let out = run(&program, &args, None, Duration::from_secs(15)).await?;
+    let mut title = None;
+    let mut ids = Vec::new();
+    for line in out.lines() {
+        let (name, id) = line.rsplit_once('\t').unwrap_or(("", line));
+        let id = id.trim();
+        if id.len() == 11
+            && id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            ids.push(id.to_owned());
+            if title.is_none() && !name.trim().is_empty() && name != "NA" {
+                title = Some(name.trim().to_owned());
+            }
+        }
+    }
+    Ok((title, ids))
+}
+
 async fn run(
     program: &str,
     args: &[String],
