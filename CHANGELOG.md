@@ -25,8 +25,6 @@ section below as its description.
 ### Changed
 - Default volume is 100 %, so Lavalink passes Opus audio through without re-encoding.
 - Tracks start faster (`bufferDurationMs` 225 in the Lavalink config).
-- `/play` with a big YouTube playlist starts faster: the example Lavalink config loads up to
-  300 tracks (`youtubePlaylistLoadLimit: 3`).
 - `/ytdlp` converts HEVC (a frozen picture in Discord on PC), VP9 and 10-bit video to H.264
   with x264 `veryfast` instead of AV1: faster, closer to the source and plays on every client,
   with larger files. `YTDLP_REENCODE_CODEC=av1` restores the old behaviour.

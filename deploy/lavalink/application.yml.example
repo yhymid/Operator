@@ -18,9 +18,9 @@ lavalink:
     # (e.g. 400) if playback stutters on a slow connection.
     bufferDurationMs: 225
     frameBufferDurationMs: 5000
-    # Pages of 100 tracks loaded from a YouTube playlist (~0.9 s each): 3 = up to 300 tracks,
-    # so /play with a big playlist starts in ~3 s instead of ~8 s for 832 tracks at 100.
-    youtubePlaylistLoadLimit: 3
+    # Pages loaded from a YouTube playlist. Keep it high: Lavalink cannot load the rest of a
+    # playlist later, and 3 gave only 59 of 832 tracks (an 832-track playlist takes ~8 s at 100).
+    youtubePlaylistLoadLimit: 100
     playerUpdateInterval: 5
     opusEncodingQuality: 10
     resamplingQuality: HIGH
