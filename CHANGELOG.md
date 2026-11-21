@@ -14,6 +14,10 @@ section below as its description.
 - Diagnostics also sample the whole server: CPU, iowait, steal, free memory and swap.
 
 ### Changed
+- `--version`, the startup log and the diagnostics files show the git commit.
+- systemd: the bot creates private files (`UMask=0077`).
+- Releases are created as drafts after the binary passed a smoke test and are published by
+  hand.
 - `/ytdlp` encodes H.264 with x264 `veryfast` instead of `slow` (about 3.5x faster at nearly
   the same quality); `YTDLP_X264_PRESET` sets it. Measured on the VPS (6 vCPU) with a 30 s
   720p HEVC clip (source 2.7 MiB; SSIM against the source, 1 = identical):
