@@ -241,7 +241,7 @@ async fn commands_sync(args: &[String]) -> Result<ExitCode> {
         }
     }
     let token = bot_token()?;
-    let http = HttpClient::new(token.clone());
+    let http = http_client(&token);
     let raw = RawRest::new(&token)?;
     let application_id = http
         .current_user_application()
@@ -320,7 +320,7 @@ async fn run() -> Result<ExitCode> {
     start_diagnostics();
 
     let token = bot_token()?;
-    let http = Arc::new(HttpClient::new(token.clone()));
+    let http = Arc::new(http_client(&token));
     let current_user = http.current_user().await?.model().await?;
     let application_id = http.current_user_application().await?.model().await?.id;
     let state = StateStore::new(&paths.server_cache_dir)?;
@@ -586,4 +586,13 @@ async fn graceful_shutdown(app: &SharedApp, runners: &Mutex<Runners>, reason: &s
     app.fulllogs.stop().await;
     mark_all_guilds(app, false, reason, false);
     app.autoclean.stop();
+}
+
+/// Discord REST client that never pings unless a request asks for it: builder requests without
+/// `allowed_mentions` (autoclean notices, DMs) get none; JSON payloads go through `no_pings`.
+fn http_client(token: &str) -> HttpClient {
+    HttpClient::builder()
+        .token(token.to_owned())
+        .default_allowed_mentions(twilight_model::channel::message::AllowedMentions::default())
+        .build()
 }

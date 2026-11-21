@@ -433,10 +433,16 @@ impl AutoMod {
             let text = template
                 .replace("{user}", &format!("<@{}>", message.author.id))
                 .replace("{rule}", violation.rule);
+            // Only the author of the removed message is pinged, whatever the template says.
+            let mentions = twilight_model::channel::message::AllowedMentions {
+                users: vec![message.author.id],
+                ..Default::default()
+            };
             if let Ok(response) = app
                 .http
                 .create_message(message.channel_id)
                 .content(&text)
+                .allowed_mentions(Some(&mentions))
                 .await
                 && let Ok(warning) = response.model().await
             {
