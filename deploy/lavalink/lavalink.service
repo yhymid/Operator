@@ -17,6 +17,7 @@ SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 SyslogIdentifier=lavalink
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

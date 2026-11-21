@@ -1,7 +1,8 @@
 [Unit]
 Description=Operator Discord bot (Rust)
-After=network-online.target
-Wants=network-online.target
+# After the local Lavalink node; no hard link, so a Lavalink restart does not restart the bot.
+After=network-online.target lavalink.service
+Wants=network-online.target lavalink.service
 # Webhook notification, see scripts/ops/README.md (harmless if the template is not installed).
 OnFailure=operator-notify@%n.service
 
@@ -21,6 +22,8 @@ Nice=5
 # /tmp is tmpfs on the VPS: keep downloaded videos on disk, not in RAM.
 Environment=TMPDIR=/var/tmp
 TimeoutStopSec=20
+# New files private to the bot user (the website that serves /ytdlp media runs as the same user).
+UMask=0077
 SyslogIdentifier=operator
 
 [Install]
