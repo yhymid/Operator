@@ -46,6 +46,14 @@ section below as its description.
   ```
 
 ### Changed
+- No message pings anyone unless it is meant to: every Discord request defaults to no
+  mentions (autoclean notices and DMs included), and AutoMod warnings ping only the author.
+- `--version`, `/health`, `/diagnostics` and the diagnostics files show the git commit, e.g.
+  `2.0.0 (a7b5498)`.
+- systemd: the bot starts after Lavalink, and the bot and Lavalink create private files
+  (`UMask=0077`).
+- Releases are created as drafts after the binary passed a smoke test and are published by
+  hand.
 - Default volume is 100 %, so Lavalink passes Opus audio through without re-encoding.
 - Tracks start faster (`bufferDurationMs` 225 in the Lavalink config).
 - `/ytdlp` converts HEVC (a frozen picture in Discord on PC), VP9 and 10-bit video to H.264
