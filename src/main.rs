@@ -71,6 +71,10 @@ fn main() -> ExitCode {
                 commands_sync(&args[2..]).await
             }
             Some("doctor") => Ok(doctor()),
+            Some("--version" | "-V" | "version") => {
+                println!("operator-discord {}", crate::common::VERSION);
+                Ok(ExitCode::SUCCESS)
+            }
             Some("--help" | "-h" | "help") => {
                 print_usage();
                 Ok(ExitCode::SUCCESS)
@@ -102,7 +106,8 @@ fn print_usage() {
   operator-discord commands sync --guild=123,456
   operator-discord commands sync --global
   operator-discord commands sync --clear-global
-  operator-discord doctor"
+  operator-discord doctor
+  operator-discord --version"
     );
 }
 
@@ -184,7 +189,7 @@ fn doctor() -> ExitCode {
         "Operator preflight".to_owned(),
         format!(
             "- Runtime: Rust (operator-discord {})",
-            env!("CARGO_PKG_VERSION")
+            crate::common::VERSION
         ),
         format!("- Config: {}", paths.config_path.display()),
         format!("- Data dir: {}", paths.data_dir.display()),

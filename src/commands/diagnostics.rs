@@ -551,7 +551,7 @@ fn runtime_section(app: &App) -> Section {
         "Discord gateway: online".to_owned(),
         format!(
             "Runtime: Rust (operator-discord {})",
-            env!("CARGO_PKG_VERSION")
+            crate::common::VERSION
         ),
         "twilight: 0.18 | Lavalink: built-in v4 client".to_owned(),
         format!(
@@ -673,7 +673,7 @@ fn health_panel(bot_tag: &str, music: &str, logs: &str, issues: &[Issue]) -> Val
         format!("## Health · {status}"),
         format!(
             "**Bot** · online as {bot_tag} · v{}",
-            env!("CARGO_PKG_VERSION")
+            crate::common::VERSION
         ),
         format!("**Music** · {music}"),
         format!("**Logs** · {logs}"),

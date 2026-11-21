@@ -7,6 +7,16 @@
 // uses only part of it.
 #![allow(dead_code)]
 
+/// Git commit the binary was built from (`build.rs`), `unknown` without git.
+pub const GIT_COMMIT: &str = env!("OPERATOR_GIT_COMMIT");
+/// `2.0.0 (abc1234)`
+pub const VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("OPERATOR_GIT_COMMIT"),
+    ")"
+);
+
 pub mod diagnostics;
 pub mod env;
 pub mod fs;
