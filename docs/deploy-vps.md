@@ -23,6 +23,16 @@ cargo build --release
 
 Albo zbuduj lokalnie i skopiuj `target/release/operator-discord` (ta sama architektura CPU).
 
+Obecny VPS buduje ze zrodel: `scripts/vps-build.sh` (na serwerze `~/operator-src/build.sh`)
+pobiera obie galezie z GitHuba i buduje je z `nice`, a `scripts/vps-deploy.sh`
+(`~/operator-src/deploy.sh`) robi kopie do `~/backups` (zostaje tylko najnowsza), zostawia
+poprzednia binarke jako `*.prev`, podmienia, restartuje i sprawdza unity. Odmawia, gdy cos gra
+albo trwa `/ytdlp`; `FORCE=1` pomija tylko sprawdzenie muzyki.
+
+```bash
+bash ~/operator-src/build.sh && TARGETS=discord bash ~/operator-src/deploy.sh
+```
+
 ## 2. Katalogi i pliki
 
 ```bash
@@ -41,6 +51,29 @@ OPERATOR_DATA_DIR=/srv/operator/data
 OPERATOR_LOG_DIR=/srv/operator/logs
 OPERATOR_SYNC_COMMANDS_ON_STARTUP=0
 ```
+
+### Pliki danych bota
+
+Wszystko lezy w katalogu bota (na VPS `~/Main Files/Bots/operator`):
+
+| Plik / katalog | Kto zapisuje | Co zawiera | Mozna usunac? | Kopia |
+| --- | --- | --- | --- | --- |
+| `.env` | ty | tokeny, hasla, ustawienia (`0600`) | nie | tak |
+| `config.json` | ty | autoclean i automod | nie | tak |
+| `cookies.txt` | `/cookies` | ciasteczka YouTube dla yt-dlp (`0600`, sekret) | tak, `/ytdlp` z YouTube moze przestac dzialac | tak |
+| `cache/server/<id>.json` | bot | stan serwera (panel weryfikacji, wyzwania, blokady, ustawienia logow); uszkodzony plik trafia do `*.corrupt-<czas>` | nie, ustawienia wroca do domyslnych | tak |
+| `cache/music-queue/` | bot przy wylaczaniu | kolejka i pozycja do wznowienia po restarcie (usuwane po wznowieniu) | tak, muzyka nie wroci po restarcie | nie |
+| `cache/user/` | nikt (tworzy go `doctor`) | pusty | tak | nie |
+| `logs/` | FullLogs | pliki logow serwerow, sprzatane wg `retentionDays` | tak | wedlug potrzeby |
+| `diagnostics/` | rejestrator | `events-*.txt`, `summary-*.md` (bez sekretow, `0600`), 14 dni, limit MB | tak | nie |
+| `operator-discord.prev` | `vps-deploy.sh` | poprzednia binarka do szybkiego powrotu | tak, bez szybkiego powrotu | nie |
+| `.local-lavalink/application.yml` | ty | config Lavalinka: haslo, sekret Spotify, token OAuth YouTube | nie | tak |
+| `.local-lavalink/lavalink.jar`, `plugins/` | ty / Lavalink | serwer i pluginy | nie (pobierz ponownie) | nie |
+| `.local-lavalink/logs/` | Lavalink | logi Lavalinka | tak | nie |
+| `YTDLP_MEDIA_ROOT` (strona `media/`) | `/ytdlp` | duze pliki jako player, 6 h | tak | nie |
+
+`vps-deploy.sh` pakuje do `~/backups/operator-<czas>.tar.gz` wszystko z kolumny "Kopia: tak",
+binarki, `cache/` i pliki unitow systemd.
 
 ## 3. Sprawdzenie i komendy
 
