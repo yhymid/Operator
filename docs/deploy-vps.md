@@ -3,7 +3,8 @@
 ## 1. Zbuduj binarke
 
 Najprosciej z release'u: tag `discord-v*` buduje binarke w GitHub Actions (Ubuntu 22.04, dziala
-na nowszym glibc) i dolacza ja z suma SHA256. Na serwerze `scripts/deploy.sh` ja pobiera,
+na nowszym glibc), sprawdza `--version` i dolacza ja z suma SHA256 do **szkicu** wydania. Po
+tescie pliku ze szkicu kliknij "Publish release" na GitHubie. Na serwerze `scripts/deploy.sh` ja pobiera,
 sprawdza sume, czeka az bot nic nie robi (brak procesow yt-dlp/ffmpeg w unicie, brak playerow
 Lavalinka), podmienia binarke, restartuje unit i przywraca poprzednia, gdy unit nie wstanie:
 

@@ -6,6 +6,9 @@ name: Release
 #      git tag telegram-v1.2 telegram && git push github telegram-v1.2
 # The release gets the title and description from CHANGELOG.md (no generated commit list),
 # the compiled binary with its SHA256, and GitHub's source archives.
+# It is created as a DRAFT after the binary passed a smoke test (--version shows the tagged
+# commit). Download it from the draft, test it, then press "Publish release" on GitHub: the
+# published file is exactly the tested one. scripts/deploy.sh only sees published releases.
 on:
   push:
     tags:
@@ -51,11 +54,28 @@ jobs:
         run: cargo test --workspace --locked
 
       - name: Build
-        run: cargo build --release --locked -p "${{ steps.bot.outputs.package }}"
+        env:
+          PACKAGE: ${{ steps.bot.outputs.package }}
+        run: cargo build --release --locked -p "$PACKAGE"
+
+      - name: Smoke test
+        env:
+          PACKAGE: ${{ steps.bot.outputs.package }}
+        run: |
+          version=$("target/release/$PACKAGE" --version)
+          echo "$version"
+          commit=$(git rev-parse --short=7 HEAD)
+          case "$version" in
+            "$PACKAGE "*"($commit)") ;;
+            *) echo "expected $PACKAGE ... ($commit)" >&2; exit 1 ;;
+          esac
+          ldd "target/release/$PACKAGE"
 
       - name: Package
+        env:
+          PACKAGE: ${{ steps.bot.outputs.package }}
         run: |
-          bin="${{ steps.bot.outputs.package }}"
+          bin="$PACKAGE"
           out="$bin-$GITHUB_REF_NAME-x86_64-linux-gnu"
           cp "target/release/$bin" "$out"
           sha256sum "$out" > "$out.sha256"
@@ -69,3 +89,4 @@ jobs:
             ${{ env.ASSET }}.sha256
           name: ${{ env.TITLE }}
           body_path: release-notes.md
+          draft: true
