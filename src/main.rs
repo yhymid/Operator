@@ -31,6 +31,13 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(25);
 const MAX_CONCURRENT_HANDLERS: usize = 32;
 
 fn main() -> ExitCode {
+    if matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("--version" | "-V" | "version")
+    ) {
+        println!("operator-telegram {}", crate::common::VERSION);
+        return ExitCode::SUCCESS;
+    }
     crate::common::env::load_dotenv();
     log::init();
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -118,6 +125,7 @@ async fn run() -> ExitCode {
     log::info(
         "Bot uruchomiony. Oczekiwanie na wiadomości…",
         Some(json!({
+            "version": crate::common::VERSION,
             "developerMode": log::developer_mode(),
             "handlerTimeout": settings.handler_timeout_ms,
             "apiRoot": settings.api_root,

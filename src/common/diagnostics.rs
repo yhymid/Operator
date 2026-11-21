@@ -131,7 +131,7 @@ pub fn init(options: Options, app: &str, secrets: Vec<String>) -> Result<(), Str
     install_panic_hook();
     record(
         "diagnostics.started",
-        json!({ "pid": std::process::id(), "app": app, "version": env!("CARGO_PKG_VERSION"),
+        json!({ "pid": std::process::id(), "app": app, "version": env!("CARGO_PKG_VERSION"), "commit": super::GIT_COMMIT,
                 "dir": dir.display().to_string() }),
     );
     Ok(())
