@@ -427,6 +427,7 @@ fn play_error_text(message: &str, requested: &str) -> String {
 /// the first track that loads from the playlist's first 10 entries (yt-dlp, ~3 s), then load
 /// the whole playlist in the background and append everything after that track. `None` (the
 /// normal path) when yt-dlp or every one of the 10 tracks fails.
+/// `MUSIC_PLAYLIST_FAST_START=0` turns it off (the whole playlist loads first, as before).
 async fn fast_playlist_start(
     ix: &Ix<'_>,
     session: &mut crate::modules::music::Session,
@@ -611,7 +612,8 @@ async fn execute_play(ix: &Ix<'_>, guild_id: Id<GuildMarker>) -> Result<()> {
                         .await?;
                 }
                 stage = "resolve";
-                if crate::modules::music::youtube_playlist_only(&query)
+                if crate::common::env::bool("MUSIC_PLAYLIST_FAST_START", true)
+                    && crate::modules::music::youtube_playlist_only(&query)
                     && let Some(text) = fast_playlist_start(ix, session, &query).await?
                 {
                     return Ok(text);

@@ -24,7 +24,7 @@ section below as its description.
 - `/play` with a YouTube playlist link starts the music after ~4 s instead of waiting for the
   whole list: the first playable of the first 10 entries plays at once and the rest of the
   playlist is added to the queue in the background. Diagnostics record both times
-  (`music.playlist`). Measured on the VPS with an 832-track playlist (before: the whole list
+  (`music.playlist`); `MUSIC_PLAYLIST_FAST_START=0` turns it off. Measured on the VPS with an 832-track playlist (before: the whole list
   loaded first, music after 8.97 s):
 
   ```text
